@@ -3,6 +3,7 @@
 *.avi
 *.mov
 *.wav
+*.png
 
 
 # Byte-compiled / optimized / DLL files
