@@ -1,3 +1,10 @@
+# non-code files
+*.pdf
+*.avi
+*.mov
+*.wav
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
