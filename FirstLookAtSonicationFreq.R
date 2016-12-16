@@ -15,6 +15,7 @@ packages <- c("gsheet", "ggplot2", "reshape2", "pwr")
 ipak(packages)
 
 
+# viewable URL (make sure it cannot be edited)
 URL = "https://docs.google.com/spreadsheets/d/1qbld3hmg-11BYmHhO6VXJ89-60xG8hY5nqmf2yKuXKQ/edit?usp=sharing"
 
 bdta <- gsheet2tbl(URL)
@@ -37,7 +38,32 @@ for(ii in 1:nrow(bdta)){
 bdta$trt <- trt
 
 
-plot(bdta$averageFreq ~ bdta$trt)
+# get info for last trial
+lastTrial <- t(sapply(unique(bdta$BeeColorNum), function(ii){
+     tmp <- bdta[bdta$BeeColorNum == ii, ]
+     return(c(tmp$rewardFreq1[nrow(tmp)], tmp$rewardFreq2[nrow(tmp)], tmp$averageFreq[nrow(tmp)]))
+     
+}))
 
-ggplot(bdta, aes(x = trt, y = averageFreq)) + 
+lt <- as.data.frame(lastTrial)
+lt$beeCol <- row.names(lt)
+colnames(lt) <- c("f1", "f2", "lastF")
+lt$trt <- paste(lt$f1, lt$f2, sep = "_")
+lt <- lt[lt$trt %in% names(table(lt$trt))[table(lt$trt) > 5], ]
+
+
+#weird
+ggplot(lt, aes(x = trt, y = lastF)) + 
      geom_boxplot()
+
+
+library(plyr)
+bdta$trt <- mapvalues(bdta$BeeColorNum, from = lt[,4],  to = lt[,5])
+bdta$trt[!(bdta$trt %in% names(table(lt$trt))[table(lt$trt) > 5])] <- NA
+
+ggplot(bdta, aes(x = BeeTrialNum, y = averageFreq)) + 
+     geom_point(aes(color = BeeColorNum)) + 
+     geom_smooth( se = FALSE) + 
+     theme(legend.position = "none") + 
+     facet_wrap(~trt)
+
