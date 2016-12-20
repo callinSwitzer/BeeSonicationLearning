@@ -70,3 +70,7 @@ ggplot(bgDF, aes(x = buzzNum, y = freq, color = bee)) +
      geom_line(alpha = 0.3) + 
      geom_smooth(se = FALSE) + 
      geom_vline(xintercept = 50)
+
+
+m1 <- lmer(freq ~ trt + (1|bee), data = bgDF)
+summary(m1)
