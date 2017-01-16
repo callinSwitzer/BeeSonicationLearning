@@ -56,6 +56,14 @@ lt <- lt[lt$trt %in% names(table(lt$trt))[table(lt$trt) > 5], ]
 ggplot(lt, aes(x = trt, y = lastF)) + 
      geom_boxplot()
 
+ggplot(bdta, aes(x = trt, y = averageFreq)) + 
+     geom_boxplot() + 
+     geom_point() 
+     
+
+summary(aov(bdta$averageFreq~bdta$trt))
+
+length(unique(bdta$BeeColorNum))
 
 library(plyr)
 bdta$trt <- mapvalues(bdta$BeeColorNum, from = lt[,4],  to = lt[,5])
