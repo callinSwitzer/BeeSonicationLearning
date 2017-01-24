@@ -24,6 +24,10 @@
 .Rproj.user/
 *.Rproj
 
+# ipython checkpoints
+.ipynb_checkpoints/
+
+
 # produced vignettes
 vignettes/*.html
 vignettes/*.pdf
