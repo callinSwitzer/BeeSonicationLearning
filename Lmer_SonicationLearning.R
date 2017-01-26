@@ -11,7 +11,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("gsheet", "ggplot2", "reshape2", "pwr", 'lme4', 'sjPlot')
+packages <- c("gsheet", "ggplot2", "reshape2", "pwr", 'lme4', 'sjPlot', 'gsheet')
 ipak(packages)
 
 theme_set(theme_bw())
@@ -19,24 +19,80 @@ theme_set(theme_bw())
 
 sl <- read.csv('freqLearn2.csv')
 
+# get hive
+sl$hive <- sapply(1:nrow(sl), FUN = function(ii) {
+     s1 <- strsplit(as.character(sl$BeeNumCol[ii]), split = "[hH]ive")[[1]][2]
+     strsplit(s1, "_")[[1]][1]
+})
+
 # remove test rows
 sl <- sl[sl$beeCol != 'TESTTESTPHOTO',]
+
+table(sl$hive, useNA = 'always')
+
+## make sure all bee colors are lowercase
+sl$beeCol <- tolower(sl$beeCol)
+
 
 
 # TODO: check why there are some values lower than 220 and higher than 450
 sl <- sl[sl$freq > 220 & sl$freq < 450,]
 
 # plot each bee's frequency over time by treatment
-ggplot(sl, aes(x = freq, y = amp)) + 
-     geom_point()
+# ggplot(sl, aes(x = freq, y = amp)) + 
+#      geom_point()
 
 
-## TODO, add IT Span to dataset
+## Add IT Span to dataset
+URL = 'https://docs.google.com/spreadsheets/d/1qbld3hmg-11BYmHhO6VXJ89-60xG8hY5nqmf2yKuXKQ/edit?usp=sharing'
+mtadta <- gsheet2tbl(URL)
+
+md2 <- gsheet2tbl('https://docs.google.com/spreadsheets/d/12f5Yca-MYAtvCw1WmViqPoil6LUsUsJhWK9W9tAyvp4/edit?usp=sharing')
+
+md2 <- data.frame(md2[!is.na(md2$IT), c('BeeColorNum', 'IT')])
+
+# get bee sizes
+md <- data.frame(mtadta[!is.na(mtadta$IT), c('BeeColorNum', 'IT') ])
+
+md <- rbind(md, md2)
+table(md$BeeColorNum)
+sum(table(md$BeeColorNum) != 1) # check to make sure I don't have repeated bees
 
 
+# merge md into full dataset
+md
+head(sl)
+
+sl_2 <- merge(md, sl, by.x = c("BeeColorNum"), by.y = ("beeCol"), all = TRUE)
+head(sl_2)
+
+sl <- sl_2
+
+
+table(interaction(sl$BeeColorNum, sl$IT))[table(interaction(sl$BeeColorNum, sl$IT)) != 0]
+
+# see how many rows are missing IT Span
+nrow(sl[is.na(sl$IT), ]) # this is just a few bees
+unique(sl[is.na(sl$IT), 'BeeColorNum']) # three bees
+
+
+# Check on this:
+plot(sl_2$IT ~sl_2$freq)
+abline(lm(sl_2$IT ~ sl_2$freq))
+sl[sl$IT < 3.1, ]
+
+sl<- sl[!is.na(sl$BeeColorNum), ]
+
+ggplot(sl, aes(x = index, y = freq, color = BeeColorNum)) + 
+     geom_point(aes(shape = as.factor(trialNum))) + 
+     facet_wrap(~BeeColorNum) + 
+     theme(legend.position = "none")
+
+library(lattice)
+bwplot(freq ~  trt | factor(trialNum) , data = sl)
+
+hist(sl$freq)
 trt <- character()
-
-unique(interaction(sl$lowFrq, sl$highFrq))
      
 for(ii in 1:nrow(sl)){
      low <- sl$lowFrq[ii]
@@ -59,15 +115,51 @@ sl$trt <- relevel(as.factor(sl$trt), ref = "initial")
 options(digits.secs = 5)
 sl$datetime_str <- as.POSIXct(sl$datetime_str)
 
+sl$IT_C <- scale(sl$IT, center = TRUE, scale = FALSE)
+
 
 
 # multilevel model
-m1 <- lmer(freq ~ trialNum*index*trt +  (1|beeCol), data = sl)
+library(lmerTest)
+step(m1.1)
+sl$IT_C <- as.numeric(sl$IT_C)
+
+m1 <- lmer(freq ~ trialNum + index + trt + IT_C + hive + (1 +  trialNum |BeeColorNum), data = sl)
 summary(m1)
+AIC(m1)
+
+# multilevel model
+m1.1 <- lmer(freq ~ (trialNum+index+trt+ IT_C + hive)^2 +   (1|BeeColorNum), data = sl[sl$trt != "unrewarded",])
+summary(m1.1)
+m11 <- step(m1.1)
+m12 <- lmer(freq ~ trialNum + index + trt + IT_C + hive + 
+                 (1 | BeeColorNum) + trialNum:index + trialNum:trt + trialNum:IT_C + 
+                 trialNum:hive + index:trt + index:IT_C + index:hive + trt:IT_C + 
+                 trt:hive, data = sl)
+summary(m12)
+m11
+AIC(m11)
+
+ggplot(sl[sl$trialNum == 1 & sl$trt != "unrewarded",] , aes(x = trt, y = freq)) + 
+     geom_boxplot() + 
+     facet_wrap(~ index %% 15)
+
+
+
+ll <- sl[sl$trialNum == 1,]
+
+summary(lmer(freq ~ trt + IT_C + hive + trialNum + index +  (1|BeeColorNum), data =sl[sl$trt != "unrewarded",] ))
+
+anova(m1, m1.1)
+
+m1_lm <- lm(freq ~ trialNum*index*trt*IT_C, data = sl)
+summary(m1_lm)
+
+plot(m1_lm)
 
 m2 <- update(m1, .~. -trialNum:index:trt )
 anova(m1, m2) # keep 3-way interaction
-
+sjp.lmer(m1)
 
 # sjp.lmer(m1, type = 'fe.cor')
 # sjp.lmer(m1, type = 're.qq')
@@ -113,6 +205,38 @@ ggplot(sl[sl$trialNum > 4,], aes(x = trt, y = freq)) +
 beeMeans <- tapply(sl$freq, INDEX = sl$beeCol,FUN = mean )
 
 tapply(sl$freq, INDEX = sl$trt, FUN = mean)
+
+
+# calculate bees' means by treatment
+eDF <- list()
+for(bee in unique(as.character(sl$BeeColorNum))){
+     tmp <- sl[sl$BeeColorNum == bee, ]
+     eDF[[bee]] <-  tapply(tmp$freq, INDEX = tmp$trt, mean)
+}
+
+beeTrtAvgs <- t(as.data.frame(eDF))
+beetrtAvgs_long <- melt(beeTrtAvgs, varnames = c('bee', 'trt'))
+
+ggplot(beetrtAvgs_long, aes(x = trt, y = value)) + 
+     geom_boxplot() + 
+     geom_point(aes(color = bee), alpha = 0.2) + 
+     geom_line(stat="smooth",method = "lm", aes(group = bee, color = bee),
+               size = 1,
+               alpha = 0.3) +
+      ylim(c(250, 450)) + 
+     theme(legend.position = "none")
+
+
+beetrtAvgs_long <- merge(beetrtAvgs_long, md, by.x = 'bee', by.y = 'BeeColorNum', all = TRUE)
+
+
+mm1 <- lmer(value ~ trt * IT +  (1|bee), data = beetrtAvgs_long)
+summary(mm1)
+
+R colnames(eDF) <- c('bee', 'frqInitia', 'frqhigh', 'frqlow', 'frqUnrewarded')
+
+# get each bee's treatments
+beeTrts <- tapply(as.character(sl$trt), INDEX = sl$BeeColorNum,FUN = function(x) names(table(x))) 
 
 # get bees' most common treatmens
 beeTrts <- tapply(sl$trt, INDEX = sl$beeCol,FUN = function(x) names(table(x))[which.max(table(x))]) 
