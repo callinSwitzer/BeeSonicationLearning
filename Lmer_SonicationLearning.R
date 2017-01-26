@@ -144,11 +144,33 @@ ggplot(sl[sl$trialNum == 1 & sl$trt != "unrewarded",] , aes(x = trt, y = freq)) 
      geom_boxplot() + 
      facet_wrap(~ index %% 15)
 
+ggplot(sl[sl$trt != "unrewarded",] , aes(x = trt, y = freq)) + 
+     geom_boxplot() + 
+     theme_classic() + 
+     labs(x = "Reward Group", y = "Sonication Frequency (Hz)")
+ggsave('~/Desktop/SonicationFreqLearning.pdf', width = 5, height = 4)
+
+ggplot(sl , aes(x = trt, y = freq)) + 
+     geom_boxplot() + 
+     theme_classic() + 
+     labs(x = "Reward Group", y = "Sonication Frequency (Hz)")
+ggsave('~/Desktop/SonicationFreqLearning_unrewarded.pdf', width = 5, height = 4)
 
 
+ggplot(sl , aes(x = trt, y = amp)) + 
+     geom_boxplot() + 
+     theme_classic() + 
+     labs(x = "Reward Group", y = "Sonication Amplitude (V)")
+ggsave('~/Desktop/SonicationAmp.pdf', width = 5, height = 4)
+
+nrow(sl)
 ll <- sl[sl$trialNum == 1,]
+length(unique(sl$BeeColorNum))
 
 summary(lmer(freq ~ trt + IT_C + hive + trialNum + index +  (1|BeeColorNum), data =sl[sl$trt != "unrewarded",] ))
+
+# amplitude model
+summary(lmer(log(amp) ~ trt + IT_C + hive + trialNum + index +  (1|BeeColorNum), data =sl ))
 
 anova(m1, m1.1)
 
