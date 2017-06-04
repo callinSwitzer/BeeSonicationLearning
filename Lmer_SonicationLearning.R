@@ -144,17 +144,45 @@ ggplot(sl[sl$trialNum == 1 & sl$trt != "unrewarded",] , aes(x = trt, y = freq)) 
      geom_boxplot() + 
      facet_wrap(~ index %% 15)
 
-ggplot(sl[sl$trt != "unrewarded",] , aes(x = trt, y = freq)) + 
-     geom_boxplot() + 
+p = ggplot(sl[sl$trt != "unrewarded",] , aes(x = trt, y = freq)) + 
+     geom_boxplot(fill = "white") + 
      theme_classic() + 
-     labs(x = "Reward Group", y = "Sonication Frequency (Hz)")
-ggsave('~/Desktop/SonicationFreqLearning.pdf', width = 5, height = 4)
+     labs(x = "Reward Group", y = "Sonication Frequency (Hz)") + 
+     scale_x_discrete(name ="Reward Group", 
+                      labels=c("Full", "High", "Low")) + 
+     theme(panel.border = element_blank(),
+           legend.key = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+           panel.background = element_blank(),
+           plot.background = element_rect(fill = "transparent",colour = NA))
+p
+ 
+ggsave(p, filename = '~/Desktop/SonicationFreqLearning.pdf',  bg = "transparent", width = 5, height = 4)
 
-ggplot(sl , aes(x = trt, y = freq)) + 
-     geom_boxplot() + 
+# calculate % rewards
+mean(sl$freq[sl$trt == "low"] < 330)
+
+xtabs( ~ sl$trt + sl$lowFrq )
+xtabs( ~ sl$trt + sl$highFrq )
+
+gg = ggplot(sl , aes(x = trt, y = freq)) + 
+     geom_boxplot(fill = "white") + 
      theme_classic() + 
-     labs(x = "Reward Group", y = "Sonication Frequency (Hz)")
-ggsave('~/Desktop/SonicationFreqLearning_unrewarded.pdf', width = 5, height = 4)
+     labs(x = "Reward Group", y = "Sonication Frequency (Hz)") + 
+     scale_x_discrete(name ="Reward Group", 
+                      labels=c("Full", "High", "Low", "Unrewarded")) + 
+     theme(panel.border = element_blank(),
+           legend.key = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+           panel.background = element_blank(),
+           plot.background = element_rect(fill = "transparent",colour = NA))
+gg
+ggsave(gg, filename = '~/Desktop/SonicationFreqLearning_unrewarded.pdf',  bg = "transparent", width = 5, height = 4)
+# ggsave('~/Desktop/SonicationFreqLearning_unrewarded.pdf', width = 5, height = 4)
 
 
 ggplot(sl , aes(x = trt, y = amp)) + 
