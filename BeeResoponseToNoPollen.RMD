@@ -1,0 +1,192 @@
+---
+title: "Visualize experiment from hives 7-8"
+author: "Callin Switzer"
+date: "28 June 2017"
+output: html_document
+---
+
+<pre>
+## Visualize experiment from hives 7-8
+## Bees were given two treatments -- reward first or second
+</pre>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/callinswitzer/Dropbox/ExperSummer2016/")
+setwd("/Users/callinswitzer/Dropbox/ExperSummer2016/")
+```
+
+# Install packages
+```{r, warning=FALSE, message = FALSE}
+ipak <- function(pkg){
+     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+     if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+     sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("ggplot2", "scales", "multcomp", "plyr", "car", "lme4", "signal")
+ipak(packages)
+
+
+# print session info and time the code was run last
+Sys.time()
+sessionInfo()
+```
+
+
+# Read in data
+```{r}
+bees <- read.csv("freqLearn_Hive78_long.csv")
+head(bees)
+
+# add metadata to dataframe
+splitMetadata <- strsplit(as.character(bees$BeeNumCol), split = "_" )
+metad1 <- data.frame(matrix(unlist(splitMetadata), nrow=length(splitMetadata), byrow=T),stringsAsFactors=FALSE)
+
+metad1[, c(1, 6)] <- NULL
+
+colnames(metad1) <- c("beeNum", "year", "month", "day", "hive", "trt")
+
+bees2 <- cbind(bees, metad1)
+
+head(bees2)
+
+```
+
+## visualize data
+```{r}
+theme_set(theme_bw())
+ggplot(bees2, aes(x = index, y = freq, color = trt)) +
+     geom_point() + 
+     geom_smooth(method = "loess")
+
+ggplot(bees2, aes(x = as.factor(index), y = freq, fill = trt)) +
+     geom_boxplot(outlier.color = NA, position = position_dodge(width = 1))
+     
+library(gridExtra)
+MinMeanSEMMax <- function(x) {
+  v <- c(mean(x) - sd(x)/sqrt(length(x)), mean(x) - sd(x)/sqrt(length(x)), mean(x), mean(x) + sd(x)/sqrt(length(x)), mean(x) + sd(x)/sqrt(length(x)))
+  names(v) <- c("ymin", "lower", "middle", "upper", "ymax")
+  v
+}
+
+g2 <- ggplot(bees2, aes(x = as.factor(index), y = freq, fill = trt)) +
+  stat_summary(fun.data=MinMeanSEMMax, geom="boxplot", colour="red") + 
+     facet_wrap(~trt) 
+g2
+
+
+par(mfrow = c(1,2))
+plot(bees2$index[bees2$trt == "RewFir" ], bees2$freq[bees2$trt == "RewFir" ], 
+     pch = 20, col = rgb(0,0,0,0.1))
+smth = lowess(bees2$index[bees2$trt == "RewFir" ], bees2$freq[bees2$trt == "RewFir" ])
+lines(smth, col = 'red', lwd = 5)
+
+plot(bees2$index[bees2$trt == "RewSec" ], bees2$freq[bees2$trt == "RewSec" ], 
+     pch = 20, col = rgb(0,0,0,0.1))
+smth = lowess(bees2$index[bees2$trt == "RewSec" ], bees2$freq[bees2$trt == "RewSec" ])
+lines(smth, col = 'blue', lwd = 5)
+```
+
+
+# visualize averages
+```{r}
+bees2$lessThan50 <- bees2$index <= 50
+
+
+ggplot(bees2, aes(x = lessThan50, y = freq, fill = trt)) +
+     geom_boxplot() 
+
+MinMeanSEMMax2 <- function(x) {
+  v <- c(min(x), mean(x) - sd(x)/sqrt(length(x)), mean(x), mean(x) + sd(x)/sqrt(length(x)), max(x))
+  names(v) <- c("ymin", "lower", "middle", "upper", "ymax")
+  v
+}
+
+
+g3 <- ggplot(bees2, aes(x = lessThan50, y = freq, fill = trt)) +
+  stat_summary(fun.data=MinMeanSEMMax, geom="boxplot", colour="red") + 
+     facet_wrap(~trt) 
+g3
+
+
+```
+
+
+# calculate average for each individual before and after treatment
+```{r}
+beeAvgs <- as.data.frame(tapply(X = bees2$freq, INDEX = list(bees2$beeNum, bees2$lessThan50), mean))
+beetrt <- as.data.frame(sapply(X = unique(bees2$beeNum), FUN = function(x) bees2[bees2$beeNum == x, ][1, "trt"]))
+
+beeAvgs <- cbind(beeAvgs, beetrt)
+
+colnames(beeAvgs) = c("Second50", "First50", "trt")
+
+beeAvgs$beeNum = row.names(beeAvgs)
+
+# convert to long format
+library(tidyr)
+
+data_long <- gather(beeAvgs, condition, frequency, First50, Second50)
+data_long
+
+dl <- data_long[order(data_long$beeNum), ]
+
+head(dl)
+
+
+g4 <- ggplot(dl, aes(x = condition, y = frequency, fill = trt)) +
+     geom_boxplot() + 
+     facet_wrap(~trt) + 
+     geom_point(position = position_jitter(width = 0.1))
+g4
+
+g5 <- ggplot(dl, aes(x = condition, y = frequency, fill = trt)) +
+  stat_summary(fun.data=MinMeanSEMMax, geom="boxplot", colour="red") + 
+     facet_wrap(~trt) + 
+     geom_point(position = position_jitter(width = 0.1))
+g5
+
+
+```
+
+
+# lmer analysis
+
+```{r}
+head(bees2)
+
+
+mod1 <- lmer(freq ~ index*trt + bees2$lessThan50 +  (1|beeNum), data = bees2 )
+summary(mod1)
+
+plot(mod1)
+
+preds <- predict(mod1, re.form = NA)
+
+plot(bees2$index, preds, col = as.factor(bees2$trt))
+
+## gam
+library(mgcv)
+
+bees3 <- bees2[bees2$index < 50, ]
+bees3 <- bees2
+gam1 <- gam(bees3$freq ~ s(bees3$index, by = as.factor(bees3$trt)) + bees3$lessThan50 +
+                 s(as.factor(bees3$beeNum),bs = "re"))
+summary(gam1)
+
+
+par(mfrow = c(2,2))
+plot(gam1, residuals = FALSE, cex = 1)
+
+# get predictions, setting rand. effect to 0
+preds  = predict(gam1, exclude="s(as.factor(bees2$beeNum))")
+
+
+plot(bees$index, preds)
+
+plot(y = residuals(gam1), bees2$index)
+
+```
+
+
