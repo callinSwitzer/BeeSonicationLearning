@@ -14,8 +14,8 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "/Users/callinswitzer/Dropbox/ExperSummer2016/")
-setwd("/Users/callinswitzer/Dropbox/ExperSummer2016/")
+knitr::opts_knit$set(root.dir = "/Users/callinswitzer/Dropbox/SonicationLearningManuscript")
+setwd("/Users/callinswitzer/Dropbox/SonicationLearningManuscript")
 ```
 
 # Install packages
@@ -52,6 +52,9 @@ colnames(metad1) <- c("beeNum", "year", "month", "day", "hive", "trt")
 bees2 <- cbind(bees, metad1)
 
 head(bees2)
+nrow(bees2)
+
+length(unique(bees2$BeeNumCol))
 
 ```
 

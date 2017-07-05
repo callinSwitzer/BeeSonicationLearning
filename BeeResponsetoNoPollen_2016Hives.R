@@ -41,14 +41,21 @@ kruskal.test(np_sm$averageFreq_unreward, np_sm$averageFreq_reward, paired = TRUE
 ## load in all buzzes for each bee, and use LMER
 # read in buzzes for each bee
 
+# change path
+# /Users/callinswitzer/Dropbox/SonicationLearningManuscript/Data/SonicationLearningWAvery_NoImages/Beeorange_18Dec2016_Hive5_initial
+
+npp$initialPath2 <- gsub("/Volumes/My Passport/BeeSonicationLearningWithAvery/BeeFrequencyLearning/", replacement = "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Data/SonicationLearningWAvery_NoImages/", x = npp$initialPath)
+
+npp$noRewardPath2 <- gsub("/Volumes/My Passport/BeeSonicationLearningWithAvery/BeeFrequencyLearning/", replacement = "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Data/SonicationLearningWAvery_NoImages/", x = npp$noRewardPath)
+
 bgDF <- data.frame()
 for(ii in 1:nrow(npp)){
      tmp <- npp[ii, ]
-     initialDF <- read.csv(tmp$initialPath, header = FALSE)
+     initialDF <- read.csv(tmp$initialPath2, header = FALSE)
      initialDF$bee <- tmp$BeeColorNum
      initialDF$trt <- "initial"
      
-     noDF <- read.csv(tmp$noRewardPath, header = FALSE)
+     noDF <- read.csv(tmp$noRewardPath2, header = FALSE)
      noDF$bee <- tmp$BeeColorNum
      noDF$trt <- "NoReward"
      
@@ -64,12 +71,17 @@ for(ii in 1:nrow(npp)){
 head(bgDF)
 names(bgDF) <- c("freq", "amp", "dateTime", "rewNum", "rewTF", "lowAmp", "highAmp", "bee", "trt", "buzzNum")
 
+bgDF <- bgDF[bgDF$buzzNum < 100, ]
 
 
-ggplot(bgDF, aes(x = buzzNum, y = freq, color = bee)) + 
-     geom_line(alpha = 0.3) + 
-     geom_smooth(se = FALSE) + 
-     geom_vline(xintercept = 50)
+
+ggplot(bgDF, aes(x = buzzNum, y = freq, color = trt)) + 
+     #geom_line(alpha = 0.3) + 
+     geom_smooth(se = TRUE) 
+     # geom_vline(xintercept = c(51, 56))
+figureDir <- "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Figures/"
+
+ggsave(file.path(figureDir, "PreliminaryStopRewardTrials.pdf"), width = 4, height = 3)
 
 
 m1 <- lmer(freq ~ trt + (1|bee), data = bgDF)

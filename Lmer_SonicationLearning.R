@@ -16,8 +16,8 @@ ipak(packages)
 
 theme_set(theme_bw())
 
-
-sl <- read.csv('freqLearn2.csv')
+dataDir <- "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Data/"
+sl <- read.csv(file.path(dataDir, 'freqLearn2.csv'))
 
 # get hive
 sl$hive <- sapply(1:nrow(sl), FUN = function(ii) {
@@ -159,7 +159,10 @@ p = ggplot(sl[sl$trt != "unrewarded",] , aes(x = trt, y = freq)) +
            plot.background = element_rect(fill = "transparent",colour = NA))
 p
  
-ggsave(p, filename = '~/Desktop/SonicationFreqLearning.pdf',  bg = "transparent", width = 5, height = 4)
+
+figureDir <- "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Figures/"
+
+ggsave(p, filename = file.path(figureDir, 'SonicationFreqLearning.pdf'),  bg = "transparent", width = 5, height = 4)
 
 # calculate % rewards
 mean(sl$freq[sl$trt == "low"] < 330)
@@ -181,7 +184,11 @@ gg = ggplot(sl , aes(x = trt, y = freq)) +
            panel.background = element_blank(),
            plot.background = element_rect(fill = "transparent",colour = NA))
 gg
-ggsave(gg, filename = '~/Desktop/SonicationFreqLearning_unrewarded.pdf',  bg = "transparent", width = 5, height = 4)
+ggsave(gg, filename = file.path(figureDir, 'SonicationFreqLearning_unrewarded.pdf'),  bg = "transparent", width = 5, height = 4)
+
+foo <- sl[sl$trt == "unrewarded", ]
+unique(foo$BeeColorNum)
+
 # ggsave('~/Desktop/SonicationFreqLearning_unrewarded.pdf', width = 5, height = 4)
 
 
@@ -189,9 +196,15 @@ ggplot(sl , aes(x = trt, y = amp)) +
      geom_boxplot() + 
      theme_classic() + 
      labs(x = "Reward Group", y = "Sonication Amplitude (V)")
-ggsave('~/Desktop/SonicationAmp.pdf', width = 5, height = 4)
+ggsave(file.path(figureDir,'SonicationAmp.pdf'), width = 5, height = 4)
 
 nrow(sl)
+length(unique(sl$BeeColorNum))
+
+unique(sl$hive)
+
+
+
 ll <- sl[sl$trialNum == 1,]
 length(unique(sl$BeeColorNum))
 
