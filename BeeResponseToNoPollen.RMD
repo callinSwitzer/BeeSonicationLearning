@@ -14,8 +14,8 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "/Users/callinswitzer/Dropbox/SonicationLearningManuscript")
-setwd("/Users/callinswitzer/Dropbox/SonicationLearningManuscript")
+knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationLearningManuscript")
+setwd("/Users/cswitzer/Dropbox/SonicationLearningManuscript")
 ```
 
 # Install packages
@@ -26,7 +26,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "scales", "multcomp", "plyr", "car", "lme4", "signal", "viridis", "survival", "GGally", "survminer")
+packages <- c("ggplot2", "scales", "multcomp", "plyr", "car", "lme4", "signal", "viridis", "survival", "GGally", "survminer", "knitr")
 ipak(packages)
 
 

@@ -10,7 +10,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-dataDir <- "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Data/"
+dataDir <- "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Data"
 
 packages <- c("ggplot2", "lme4", "gsheet")
 ipak(packages)
