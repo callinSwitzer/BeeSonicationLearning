@@ -1,5 +1,5 @@
 ## Callin Switzer
-## 23 Jan 2016
+## 17 Nov 2017
 ## Multilevel model to visualize bees'
 ## behavior on the artificial pollen system
 
@@ -16,8 +16,8 @@ ipak(packages)
 
 theme_set(theme_bw())
 
-dataDir <- "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Data/"
-sl <- read.csv(file.path(dataDir, 'freqLearn2.csv'))
+dataDir <- "/Users/cswitzer/Dropbox/SonicationLearningManuscript/Data/"
+sl <- read.csv(file.path(dataDir, 'freqLearn2_updated.csv'))
 
 # get hive
 sl$hive <- sapply(1:nrow(sl), FUN = function(ii) {
@@ -36,6 +36,10 @@ sl$beeCol <- tolower(sl$beeCol)
 
 
 # TODO: check why there are some values lower than 220 and higher than 450
+hist(sl$freq)
+sl[sl$freq < 220 | sl$freq > 450,]
+
+
 sl <- sl[sl$freq > 220 & sl$freq < 450,]
 
 # plot each bee's frequency over time by treatment
@@ -160,7 +164,7 @@ p = ggplot(sl[sl$trt != "unrewarded",] , aes(x = trt, y = freq)) +
 p
  
 
-figureDir <- "/Users/callinswitzer/Dropbox/SonicationLearningManuscript/Figures/"
+figureDir <- "/Users/cswitzer/Dropbox/SonicationLearningManuscript/Figures/"
 
 ggsave(p, filename = file.path(figureDir, 'SonicationFreqLearning.pdf'),  bg = "transparent", width = 5, height = 4)
 
