@@ -35,15 +35,12 @@ sl$beeCol <- tolower(sl$beeCol)
 
 
 
-# TODO: check why there are some values lower than 220 and higher than 450
+# make sure there are values lower than 220 and higher than 450 (the cutoff for buzzes used in the experiment)
 hist(sl$freq)
-sl[sl$freq < 220 | sl$freq > 450,]
-
-
-sl <- sl[sl$freq > 220 & sl$freq < 450,]
+sl[sl$freq < 220 | sl$freq > 450,] # should have 0 rows
 
 # plot each bee's frequency over time by treatment
-# ggplot(sl, aes(x = freq, y = amp)) + 
+# ggplot(sl, aes(x = freq, y = amp)) +
 #      geom_point()
 
 
@@ -92,8 +89,7 @@ ggplot(sl, aes(x = index, y = freq, color = BeeColorNum)) +
      facet_wrap(~BeeColorNum) + 
      theme(legend.position = "none")
 
-library(lattice)
-bwplot(freq ~  trt | factor(trialNum) , data = sl)
+
 
 hist(sl$freq)
 trt <- character()
@@ -109,6 +105,14 @@ for(ii in 1:nrow(sl)){
 
 
 sl$trt <- trt
+
+# look at treatments
+head(sl)
+xtabs(~sl$BeeColorNum + trt, data = sl )
+
+
+library(lattice)
+bwplot(freq ~  trt | factor(trialNum) , data = sl)
 
 # TODO: exclude individuals that have no "initial" value
 
