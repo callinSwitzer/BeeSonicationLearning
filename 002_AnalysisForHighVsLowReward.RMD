@@ -35,7 +35,7 @@ dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
 figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
 
 
-sl <- read.csv(file.path(dataDir, 'freqLearn2_updated.csv'))
+sl <- read.csv(file.path(dataDir, 'CombinedBeeTrials_noWingbeats.csv'))
 
 # get hive
 sl$hive <- sapply(1:nrow(sl), FUN = function(ii) {
@@ -51,38 +51,32 @@ table(sl$hive, useNA = 'always')
 ## make sure all bee colors are lowercase
 sl$beeCol <- tolower(sl$beeCol)
 
-
-
-# make sure there are values lower than 220 and higher than 450 (the cutoff for buzzes used in the experiment)
+# make sure there are values lower than 220 and higher than 450 
+# (the cutoff for buzzes used in the experiment)
 hist(sl$freq)
 sl[sl$freq < 220 | sl$freq > 450,] # should have 0 rows
 
-# plot each bee's frequency over time by treatment
-# ggplot(sl, aes(x = freq, y = amp)) +
-#      geom_point()
-
-
 ## Add IT Span to dataset
-URL = 'https://docs.google.com/spreadsheets/d/1qbld3hmg-11BYmHhO6VXJ89-60xG8hY5nqmf2yKuXKQ/edit?usp=sharing'
-mtadta <- gsheet2tbl(URL)
+beeMet1 = paste0(dataDir, "/BeeMetaData1.csv")
+mtadta <- read.csv(beeMet1)
 
-md2 <- gsheet2tbl('https://docs.google.com/spreadsheets/d/12f5Yca-MYAtvCw1WmViqPoil6LUsUsJhWK9W9tAyvp4/edit?usp=sharing')
 
-md2 <- data.frame(md2[!is.na(md2$IT), c('BeeColorNum', 'IT')])
+beeMet2 = paste0(dataDir, "/BeeMetaData2.csv")
+md2 <- read.csv(beeMet2)
+
+
 
 # get bee sizes
-md <- data.frame(mtadta[!is.na(mtadta$IT), c('BeeColorNum', 'IT') ])
+md <- droplevels(data.frame(mtadta[!is.na(mtadta$IT), c('BeeColorNum', 'IT') ]))
+md2 <- droplevels(data.frame(md2[!is.na(md2$IT), c('BeeColorNum', 'IT')]))
 
-md <- rbind(md, md2)
-table(md$BeeColorNum)
-sum(table(md$BeeColorNum) != 1) # check to make sure I don't have repeated bees
-
+md3 <- rbind(md, md2)
+table(md3$BeeColorNum)
+sum(table(md3$BeeColorNum) != 1) # check to make sure I don't have repeated bees
 
 # merge md into full dataset
-md
-head(sl)
 
-sl_2 <- merge(md, sl, by.x = c("BeeColorNum"), by.y = ("beeCol"), all = TRUE)
+sl_2 <- merge(md3, sl, by.x = c("BeeColorNum"), by.y = ("beeCol"), all = TRUE)
 head(sl_2)
 
 sl <- sl_2
