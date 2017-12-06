@@ -41,16 +41,10 @@ dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
 figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
 
 
-sl <- read.csv(file.path(dataDir, 'CombinedBeeTrials_noWingbeats.csv'))
+sl <- read.csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
+head(sl)
+dim(sl)
 
-# get hive
-sl$hive <- sapply(1:nrow(sl), FUN = function(ii) {
-     s1 <- strsplit(as.character(sl$BeeNumCol[ii]), split = "[hH]ive")[[1]][2]
-     strsplit(s1, "_")[[1]][1]
-})
-
-# remove test rows
-sl <- sl[sl$beeCol != 'TESTTESTPHOTO',]
 
 table(sl$hive, useNA = 'always')
 
@@ -59,82 +53,91 @@ sl$beeCol <- tolower(sl$beeCol)
 
 # make sure there are values lower than 220 and higher than 450 
 # (the cutoff for buzzes used in the experiment)
-hist(sl$freq)
+hist(sl$freq, breaks = seq(215, 450, by = 10))
 sl[sl$freq < 220 | sl$freq > 450,] # should have 0 rows
 
-## Add IT Span to dataset
-beeMet1 = paste0(dataDir, "/BeeMetaData1.csv")
-mtadta <- read.csv(beeMet1)
-
-
-beeMet2 = paste0(dataDir, "/BeeMetaData2.csv")
-md2 <- read.csv(beeMet2)
-
-
-
-# get bee sizes
-md <- droplevels(data.frame(mtadta[!is.na(mtadta$IT), c('BeeColorNum', 'IT') ]))
-md2 <- droplevels(data.frame(md2[!is.na(md2$IT), c('BeeColorNum', 'IT')]))
-
-md3 <- rbind(md, md2)
-table(md3$BeeColorNum)
-sum(table(md3$BeeColorNum) != 1) # check to make sure I don't have repeated bees
-
-# merge md into full dataset
-
-sl_2 <- merge(md3, sl, by.x = c("BeeColorNum"), by.y = ("beeCol"), all = TRUE)
-head(sl_2)
-
-sl <- sl_2
-
-
-table(interaction(sl$BeeColorNum, sl$IT))[table(interaction(sl$BeeColorNum, sl$IT)) != 0]
-
-# see how many rows are missing IT Span
-nrow(sl[is.na(sl$IT), ]) # this is just a few bees
-unique(sl[is.na(sl$IT), 'BeeColorNum']) # three bees
-
-
-
-
-sl<- sl[!is.na(sl$BeeColorNum), ]
-
-ggplot(sl, aes(x = index, y = freq, color = BeeColorNum)) + 
-     geom_point(aes(shape = as.factor(trialNum))) + 
-     facet_wrap(~BeeColorNum) + 
-     theme(legend.position = "none")
-
-
-
-hist(sl$freq)
-trt <- character()
-     
-for(ii in 1:nrow(sl)){
-     low <- sl$lowFrq[ii]
-     high <- sl$highFrq[ii]
-     if(low == 220  & high == 450) trt[ii] = 'initial'
-     else if(low == 500) trt[ii] = 'unrewarded'
-     else if(low > 250) trt[ii] = 'high'
-     else if(low < 250 & high <= 350) trt[ii] = 'low'
-}
-
-
-sl$trt <- trt
-
-# plot initial freq vs. IT span
-ITss = data.frame(IT = (tapply(sl$IT, INDEX = sl$BeeColorNum, function(x) x[1])))
-meanFreq = data.frame(meanFreq = tapply(sl$freq[sl$trt == "initial"], INDEX = sl$BeeColorNum[sl$trt == "initial"], mean))
-
-avgdf = merge(ITss, meanFreq, by = 'row.names')
-avgdf = avgdf[complete.cases(avgdf), ]
-
-
-plot(avgdf$meanFreq ~ avgdf$IT)
-abline(lm(avgdf$meanFreq ~ avgdf$IT))
-text(x = 4.5, y = 400, "Bigger bees buzz at lower frequencies")
-sl[sl$IT < 3.1, ]
 
 # look at treatments
-head(sl)
-xtabs(~sl$BeeColorNum + trt, data = sl )
+xtabs(~sl$beeCol+ trt, data = sl )
+```
+
+# Visualizations
+
+```{r}
+# calculate trial averages and plot
+sl$colNum = paste(sl$beeCol, sl$hive, sep = "_")
+
+
+aggdata <- aggregate(sl$freq, by=list(colNum = sl$colNum,trialNum =sl$trialNum, trt = sl$trt), FUN=mean, na.rm=TRUE)
+colnames(aggdata)[colnames(aggdata) == "x"] = "freq"
+#aggdata$trt = sapply(1:nrow(aggdata), FUN = function(x){sl[sl$colNum == aggdata$colNum[x] & sl$trialNum == aggdata$trialNum[x], "trt"][1]})
+aggdata = aggdata[order(aggdata$colNum, aggdata$trialNum, decreasing = FALSE), ]
+agg_sm = aggdata[aggdata$trialNum <= 2, ]
+rownames(agg_sm) = 1:nrow(agg_sm)
+agg_sm
+
+
+aggdata[aggdata$colNum == "whitepink_5", ]
+
+
+agg_sm[duplicated(data.frame(agg_sm$colNum, agg_sm$trialNum)), ]
+
+ggplot(agg_sm, aes(x = trt, y = freq, fill = trialNum > 1)) +
+  geom_boxplot(alpha = 0.2) + 
+  geom_point(aes(color = trialNum>1)) + 
+  geom_line(aes(group = colNum))
+
+
+diffdf <- sapply(unique(agg_sm$colNum), FUN = function(x){
+  tmp = agg_sm[agg_sm$colNum == x, ]
+  if(nrow(tmp) <= 1)
+    diff = NA
+  else
+    diff = tmp$freq[tmp$trialNum == 2] - tmp$freq[tmp$trialNum == 1]
+  return(diff)
+})
+
+trtDF = sapply(unique(agg_sm$colNum), FUN = function(x){
+  tmp = agg_sm[agg_sm$colNum == x, ]
+  ttrs = paste(tmp$trt[tmp$trialNum == 1], tmp$trt[tmp$trialNum == 2], sep = "_")
+  return(ttrs)
+})
+
+buzzdiffs = data.frame(trtDF, diffdf)
+
+ggplot(buzzdiffs, aes(x = trtDF, y= diffdf)) + 
+  geom_boxplot() + 
+  geom_point()
+
+         
+agg2 = aggregate(sl$freq, by=list(colNum = sl$colNum, fullTrt =sl$trt == "full", trt = sl$trt), FUN=mean, na.rm=TRUE)
+colnames(agg2)[colnames(agg2) == "x"] = "freq"
+
+x = "whitepink_5"
+diffdf <- sapply(unique(agg2$colNum), FUN = function(x){
+  tmp = agg2[agg2$colNum == x, ]
+  if(nrow(tmp) <= 1)
+    diff = NA
+  else
+    diff =  tmp$freq[!tmp$fullTrt] - tmp$freq[tmp$fullTrt]
+  return(diff)
+})
+
+trtDF = sapply(unique(agg2$colNum), FUN = function(x){
+  tmp = agg2[agg2$colNum == x, ]
+  ttrs = paste(tmp$trt[tmp$fullTrt], tmp$trt[!tmp$fullTrt], sep = "_")
+  return(ttrs)
+})
+
+buzzdiffs = data.frame(trtDF, diffdf)
+
+ggplot(buzzdiffs, aes(x = trtDF, y= diffdf)) + 
+  geom_boxplot() + 
+  geom_point()
+
+
+ggplot(aggdata[aggdata$trialNum <= 2, ], aes(x = trialNum, y = freq)) + 
+       geom_point() + 
+  facet_wrap(~colNum)
+
 ```
