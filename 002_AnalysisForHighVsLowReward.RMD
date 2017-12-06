@@ -3,10 +3,16 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
+
+
+<pre>
+
 ## Callin Switzer
 ## 17 Nov 2017
 ## Multilevel model to visualize bees'
 ## behavior on the artificial pollen system
+
+</pre>
 
 
 
@@ -16,7 +22,7 @@ knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationBehavior")
 ```
 
 
-```{R}
+```{r}
 #install packages
 ipak <- function(pkg){
      new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
