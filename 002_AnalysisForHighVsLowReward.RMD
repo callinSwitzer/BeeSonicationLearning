@@ -30,7 +30,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("gsheet", "ggplot2", "reshape2", "pwr", 'lme4', 'sjPlot', 'gsheet')
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp")
 ipak(packages)
 
 # set ggplot theme
@@ -66,6 +66,8 @@ xtabs(~sl$beeCol+ trt, data = sl )
 ```{r}
 # calculate trial averages and plot
 sl$colNum = paste(sl$beeCol, sl$hive, sep = "_")
+sl$trt <- as.character(sl$trt)
+sl$trt[sl$trt == "full" & sl$trialNum >1 ] <- "full_2"
 
 
 aggdata <- aggregate(sl$freq, by=list(colNum = sl$colNum,trialNum =sl$trialNum, trt = sl$trt), FUN=mean, na.rm=TRUE)
@@ -110,34 +112,84 @@ ggplot(buzzdiffs, aes(x = trtDF, y= diffdf)) +
   geom_point()
 
          
-agg2 = aggregate(sl$freq, by=list(colNum = sl$colNum, fullTrt =sl$trt == "full", trt = sl$trt), FUN=mean, na.rm=TRUE)
+agg2 = aggregate(sl$freq, by=list(colNum = sl$colNum, fullTrt = sl$trt == "full", trt = sl$trt), FUN=mean, na.rm=TRUE)
 colnames(agg2)[colnames(agg2) == "x"] = "freq"
+agg2$trt = as.character(agg2$trt)
 
-x = "whitepink_5"
-diffdf <- sapply(unique(agg2$colNum), FUN = function(x){
+
+x = "limepurple_5"
+diffdf <- t(as.data.frame(t(sapply(unique(agg2$colNum), FUN = function(x){
   tmp = agg2[agg2$colNum == x, ]
   if(nrow(tmp) <= 1)
-    diff = NA
-  else
-    diff =  tmp$freq[!tmp$fullTrt] - tmp$freq[tmp$fullTrt]
+    return(NA)
+  if (length(unique(tmp$trt)) > 2){
+    tmp = tmp[tmp$trt != "full_2", ]
+  }
+  diff =  tmp$freq[!tmp$fullTrt] - tmp$freq[tmp$fullTrt]
   return(diff)
-})
+
+}))))
+
+length(diffdf)
 
 trtDF = sapply(unique(agg2$colNum), FUN = function(x){
   tmp = agg2[agg2$colNum == x, ]
+  if (length(unique(tmp$trt)) > 2){
+    tmp = tmp[tmp$trt != "full_2", ]
+  }
   ttrs = paste(tmp$trt[tmp$fullTrt], tmp$trt[!tmp$fullTrt], sep = "_")
   return(ttrs)
 })
 
+length(trtDF)
+
 buzzdiffs = data.frame(trtDF, diffdf)
 
-ggplot(buzzdiffs, aes(x = trtDF, y= diffdf)) + 
+ggplot(droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]), aes(x = trtDF, y= as.numeric(diffdf))) + 
   geom_boxplot() + 
   geom_point()
+
+
+m1 = lm(as.numeric(diffdf) ~ trtDF - 1, data = droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]))
+summary(m1)
+
+sl$trt = relevel(factor(sl$trt), ref = "full")
+
+library(plyr)
+sl$trt2 = mapvalues(sl$trt, from = c("full", "full_2", "high", "low"), 
+                    to = c("full", "full", "high", "low"))
+
+m2 = lmer(freq ~ trt2*trialNum + as.factor(hive) +   (1|colNum), data = sl)
+summary(m2)
+
+# or this
+
+m2 = lmer(freq ~ trt + as.factor(hive) +   (1|colNum), data = sl)
+summary(m2)
+
+
+plot(m2)
+qqnorm(ranef(m2)$colNum[[1]])
+qqline(ranef(m2)$colNum[[1]])
+
+sjp.lmer(m2) # plot random effects to find any outliers
+sjp.lmer(m2, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+
+# post-hoc tests
+lft = summary(glht(m2, linfct = mcp(trt2 = "Tukey")))[2]$linfct[c(4,5,6), ]
+summary(glht(m2, linfct = lft), test = adjusted("none"))
+
 
 
 ggplot(aggdata[aggdata$trialNum <= 2, ], aes(x = trialNum, y = freq)) + 
        geom_point() + 
   facet_wrap(~colNum)
+
+```
+
+
+# make plot(s) for presentation
+```{r}
+
 
 ```
