@@ -186,4 +186,4 @@ ggplot(ampFrq, aes(y = amp, x = frq, color = trt)) +
 # # calculate sample size, assuming a simple t-test
 # pwr.t.test(d = dd, sig.level = 0.05, type = "paired", power = 0.8)
 # # 49 bees....thats a lot.  Doing repeated measurements will probably require fewer bees.
-
+```

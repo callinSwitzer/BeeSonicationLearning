@@ -277,4 +277,6 @@ g1 <- ggplot(ee, aes(x=trt2, y=fit))+
 g1
 
 
+#refref: todo -- find percentage of buzzes that were rewarded for each treatment
+
 ```
