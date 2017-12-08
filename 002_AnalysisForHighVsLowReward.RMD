@@ -30,7 +30,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp")
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects")
 ipak(packages)
 
 # set ggplot theme
@@ -72,6 +72,11 @@ sl$trt[sl$trt == "full" & sl$trialNum >1 ] <- "full_2"
 
 aggdata <- aggregate(sl$freq, by=list(colNum = sl$colNum,trialNum =sl$trialNum, trt = sl$trt), FUN=mean, na.rm=TRUE)
 colnames(aggdata)[colnames(aggdata) == "x"] = "freq"
+
+aggdata_sd <- aggregate(sl$freq, by=list(colNum = sl$colNum,trialNum =sl$trialNum, trt = sl$trt), FUN=sd, na.rm=TRUE)
+colnames(aggdata_sd)[colnames(aggdata_sd) == "x"] = "freq_sd"
+
+aggdata = merge(aggdata, aggdata_sd)
 #aggdata$trt = sapply(1:nrow(aggdata), FUN = function(x){sl[sl$colNum == aggdata$colNum[x] & sl$trialNum == aggdata$trialNum[x], "trt"][1]})
 aggdata = aggdata[order(aggdata$colNum, aggdata$trialNum, decreasing = FALSE), ]
 agg_sm = aggdata[aggdata$trialNum <= 2, ]
@@ -116,8 +121,6 @@ agg2 = aggregate(sl$freq, by=list(colNum = sl$colNum, fullTrt = sl$trt == "full"
 colnames(agg2)[colnames(agg2) == "x"] = "freq"
 agg2$trt = as.character(agg2$trt)
 
-
-x = "limepurple_5"
 diffdf <- t(as.data.frame(t(sapply(unique(agg2$colNum), FUN = function(x){
   tmp = agg2[agg2$colNum == x, ]
   if(nrow(tmp) <= 1)
@@ -144,6 +147,7 @@ trtDF = sapply(unique(agg2$colNum), FUN = function(x){
 length(trtDF)
 
 buzzdiffs = data.frame(trtDF, diffdf)
+tapply(buzzdiffs$diffdf, INDEX = buzzdiffs$trtDF, mean)
 
 ggplot(droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]), aes(x = trtDF, y= as.numeric(diffdf))) + 
   geom_boxplot() + 
@@ -155,17 +159,33 @@ summary(m1)
 
 sl$trt = relevel(factor(sl$trt), ref = "full")
 
-library(plyr)
+
 sl$trt2 = mapvalues(sl$trt, from = c("full", "full_2", "high", "low"), 
                     to = c("full", "full", "high", "low"))
 
-m2 = lmer(freq ~ trt2*trialNum + as.factor(hive) +   (1|colNum), data = sl)
+
+# summary for paper
+# fit a varying slope and intercept for colNum (bee ID), and allow the slope of the trialNum
+# variable to vary by colNum (beeID)
+m2 = lmer(freq ~ trt2 + as.factor(hive) + trialNum +  (1+trialNum|colNum), data = sl)
 summary(m2)
 
-# or this
+# this model estimates a global intercept
+# random effect intercept for colNum (beeID)
+# a single global estimate for trialNum
+# the effect of trialNum within each level of colNum
+# the correlation between intercept of trialNum across levels of colNum
 
-m2 = lmer(freq ~ trt + as.factor(hive) +   (1|colNum), data = sl)
-summary(m2)
+
+
+AIC(m2) #245976.3
+
+
+m3 = lmer(freq ~  as.factor(hive) + trialNum +  (1+trialNum|colNum), data = sl)
+summary(m3)
+anova(m2,m3) # p-val for paper
+
+AIC(m3) #246086.5
 
 
 plot(m2)
@@ -175,10 +195,9 @@ qqline(ranef(m2)$colNum[[1]])
 sjp.lmer(m2) # plot random effects to find any outliers
 sjp.lmer(m2, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 
-# post-hoc tests
-lft = summary(glht(m2, linfct = mcp(trt2 = "Tukey")))[2]$linfct[c(4,5,6), ]
-summary(glht(m2, linfct = lft), test = adjusted("none"))
 
+# post-hoc tests -- pvals for paper
+summary(glht(m2, linfct = mcp(trt2 = "Tukey")), test = adjusted("none"))
 
 
 ggplot(aggdata[aggdata$trialNum <= 2, ], aes(x = trialNum, y = freq)) + 
@@ -188,8 +207,74 @@ ggplot(aggdata[aggdata$trialNum <= 2, ], aes(x = trialNum, y = freq)) +
 ```
 
 
-# make plot(s) for presentation
+# Generate CI's
 ```{r}
+# change hive to factor
+sl$hive = as.factor(sl$hive)
+m2 = lmer(freq ~ trt2 + hive + trialNum +  (1+trialNum|colNum), data = sl)
+summary(m2)
+
+
+# using hive 5, since it's the one with the most data
+pframe <- data.frame(trt2 = levels(droplevels(sl$trt2)), hive = factor(5, levels = levels(sl$hive)),  colNum = 99999, trialNum = 2)
+pframe$freq <- 0
+pp <- predict(m2, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(m2, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = 1000)
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<-bb2_se[1,]
+pframe$bhi<-bb2_se[2,]
+pframe$predMean <- pp
+pframe <- pframe[, c('trt2', "blo", "bhi", "predMean")]
+```
+
+## Make plots
+```{r}
+#plot 95% confidence intervals
+# "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
+pframe$trt3 = mapvalues(pframe$trt2, from = c("full", "high", "low"), 
+                        to = c("Full range\n(220 - 450 Hz)", "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))
+
+pframe
+g0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
+     geom_point()+ 
+     labs(y = "Sonication frequency (Hz)", x = "Frequency range for reward") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
+     theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+           legend.position = 'none') +
+     theme_classic() + 
+  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 352, label=c("a", "b", "c"),
+                color="black") 
+g0
+ggsave(plot = g0, filename = paste0(figDir, "/SonicationFreqPredsAndCI.pdf"), width = 5, height = 4)
+
+
+
+
+# this basically gives the same result as bootstrapping
+# it's a good double check
+ee <- as.data.frame(Effect(c("trt2"), 
+                           fixed.predictors =list(given.values = c(hive4 = 0, 
+                                                                   hive5 = 1, 
+                                                                   trialNum = 2)),  
+                           m2) )
+
+table(sl$hive)
+
+# compare two methods -- very similar
+ee
+pframe
+
+g1 <- ggplot(ee, aes(x=trt2, y=fit))+
+     geom_point()+ 
+     labs(y = "Sonication Frequency (Hz)", x = "Treatment") + 
+     geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1)+
+     theme_classic() + 
+    annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 352, label=c("a", "b", "c"),
+                color="black") 
+g1
 
 
 ```
