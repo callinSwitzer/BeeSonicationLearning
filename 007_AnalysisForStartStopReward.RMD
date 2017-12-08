@@ -1,0 +1,404 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+<pre>
+## Visualize experiment from hives 7-8
+## Bees were given two treatments -- reward first or second
+</pre>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationLearningManuscript")
+setwd("/Users/cswitzer/Dropbox/SonicationLearningManuscript")
+```
+
+# Install packages
+```{r, warning=FALSE, message = FALSE}
+ipak <- function(pkg){
+     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+     if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+     sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("ggplot2", "scales", "multcomp", "plyr", "car", "lme4", "signal", "viridis", "survival", "GGally", "survminer", "knitr")
+ipak(packages)
+
+
+# print session info and time the code was run last
+Sys.time()
+sessionInfo()
+```
+
+
+# Read in data
+```{r}
+bees <- read.csv("freqLearn_Hive78_long.csv")
+head(bees)
+
+# add metadata to dataframe
+splitMetadata <- strsplit(as.character(bees$BeeNumCol), split = "_" )
+metad1 <- data.frame(matrix(unlist(splitMetadata), nrow=length(splitMetadata), byrow=T),stringsAsFactors=FALSE)
+
+metad1[, c(1, 6)] <- NULL
+
+colnames(metad1) <- c("beeNum", "year", "month", "day", "hive", "trt")
+
+bees2 <- cbind(bees, metad1)
+
+head(bees2)
+nrow(bees2)
+
+length(unique(bees2$BeeNumCol))
+
+```
+
+## visualize data
+```{r}
+theme_set(theme_bw())
+ggplot(bees2, aes(x = index, y = freq, color = trt)) +
+     geom_point(alpha = 0.1) + 
+     stat_smooth(method = "loess", span = 0.75)
+
+bees2$treatment <- mapvalues(bees2$trt, from = c("RewFir", "RewSec"), to = c("Rewarded_1st_50_Buzzes", "Rewarded_2nd_50_Buzzes"))
+
+ggplot(bees2, aes(x = index, y = freq, color = rewTF)) +
+     stat_smooth(method = "loess", span = 1) + 
+     xlab("Buzz Number") + 
+     ylab("Buzz Frequency(hz)") + 
+     facet_wrap(~treatment) + 
+     scale_color_viridis(name = "Rewarded Buzzes", 
+                         discrete = TRUE, begin = 0.2, end = 0.6)
+ggsave("beeRewards.png", width = 8, height = 5)
+
+
+# make survival plot
+survBees <- t(sapply(unique(bees2$beeNum), function(x) {
+     tmp <- bees2[bees2$beeNum == x, ]
+     return(tmp[which.max(tmp$index), ])
+}))
+
+
+lastObs <- as.data.frame(survBees)
+lastObs$index <- as.numeric(lastObs$index)
+
+
+# 1 = censored, 2 = stopped buzzing for 5 min
+lastObs$status <- mapvalues(lastObs$index == 100, from = c(TRUE, FALSE), to = c(1, 2))
+
+# create survival object
+lastObs$survObj <- with(lastObs, Surv(index, status == 2))
+head(lastObs)
+
+lastObs$treatment <- as.factor(unlist(lastObs$treatment))
+
+
+## Kaplan-Meier estimator. 
+km.as.one <- survfit(survObj ~ 1, data = lastObs, conf.type = "log-log")
+km.by.trt <- survfit(survObj ~ treatment, data = lastObs, conf.type = "log-log")
+
+par(mfrow = c(1,1))
+plot(km.by.trt)
+
+gsv <- ggsurvplot(km.by.trt, CI = FALSE) 
+
+gsv$plot + facet_wrap(~treatment) + 
+     theme_bw()   + 
+     theme(legend.position = "none")  + 
+     scale_color_viridis(discrete = TRUE, begin = 0.3, end = 0.7, option = "magma")  + 
+     xlab("Buzz Number") + 
+     ylab("Proportion Sonicating") 
+
+ggsave("beeSonicationPercentage.png", width = 8, height = 5)
+
+
+ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4")) + 
+     ylim(c(0, 1)) + 
+     xlab("Buzz Number") + 
+     ylab("Proportion Sonicating") 
+
+xtabs(~lastObs$treatment + as.character(lastObs$hive))
+
+
+
+ggplot(bees2, aes(x = as.factor(index), y = freq, fill = trt)) +
+     geom_boxplot(outlier.color = NA, position = position_dodge(width = 1))
+     
+library(gridExtra)
+MinMeanSEMMax <- function(x) {
+  v <- c(mean(x) - sd(x)/sqrt(length(x)), mean(x) - sd(x)/sqrt(length(x)), mean(x), mean(x) + sd(x)/sqrt(length(x)), mean(x) + sd(x)/sqrt(length(x)))
+  names(v) <- c("ymin", "lower", "middle", "upper", "ymax")
+  v
+}
+
+g2 <- ggplot(bees2, aes(x = as.factor(index), y = freq, fill = trt)) +
+  stat_summary(fun.data=MinMeanSEMMax, geom="boxplot", colour="red") + 
+     facet_wrap(~trt) 
+g2
+
+
+par(mfrow = c(1,2))
+plot(bees2$index[bees2$trt == "RewFir" ], bees2$freq[bees2$trt == "RewFir" ], 
+     pch = 20, col = rgb(0,0,0,0.1))
+smth = lowess(bees2$index[bees2$trt == "RewFir" ], bees2$freq[bees2$trt == "RewFir" ])
+lines(smth, col = 'red', lwd = 5)
+
+plot(bees2$index[bees2$trt == "RewSec" ], bees2$freq[bees2$trt == "RewSec" ], 
+     pch = 20, col = rgb(0,0,0,0.1))
+smth = lowess(bees2$index[bees2$trt == "RewSec" ], bees2$freq[bees2$trt == "RewSec" ])
+lines(smth, col = 'blue', lwd = 5)
+```
+
+
+# visualize averages
+```{r}
+bees2$lessThan50 <- bees2$index <= 50
+
+
+ggplot(bees2, aes(x = lessThan50, y = freq, fill = trt)) +
+     geom_boxplot() 
+
+MinMeanSEMMax2 <- function(x) {
+  v <- c(min(x), mean(x) - sd(x)/sqrt(length(x)), mean(x), mean(x) + sd(x)/sqrt(length(x)), max(x))
+  names(v) <- c("ymin", "lower", "middle", "upper", "ymax")
+  v
+}
+
+
+g3 <- ggplot(bees2, aes(x = lessThan50, y = freq, fill = trt)) +
+  stat_summary(fun.data=MinMeanSEMMax, geom="boxplot", colour="red") + 
+     facet_wrap(~trt) 
+g3
+
+
+```
+
+
+# calculate average for each individual before and after treatment
+```{r}
+beeAvgs <- as.data.frame(tapply(X = bees2$freq, INDEX = list(bees2$beeNum, bees2$lessThan50), mean))
+beetrt <- as.data.frame(sapply(X = unique(bees2$beeNum), FUN = function(x) bees2[bees2$beeNum == x, ][1, "trt"]))
+
+beeAvgs <- cbind(beeAvgs, beetrt)
+
+colnames(beeAvgs) = c("Second50", "First50", "trt")
+
+beeAvgs$beeNum = row.names(beeAvgs)
+
+# convert to long format
+library(tidyr)
+
+data_long <- gather(beeAvgs, condition, frequency, First50, Second50)
+data_long
+
+dl <- data_long[order(data_long$beeNum), ]
+
+head(dl)
+
+
+g4 <- ggplot(dl, aes(x = condition, y = frequency, fill = trt)) +
+     geom_boxplot() + 
+     facet_wrap(~trt) + 
+     geom_point(position = position_jitter(width = 0.1))
+g4
+
+g5 <- ggplot(dl, aes(x = condition, y = frequency, fill = trt)) +
+  stat_summary(fun.data=MinMeanSEMMax, geom="boxplot", colour="red") + 
+     facet_wrap(~trt) + 
+     geom_point(position = position_jitter(width = 0.1))
+g5
+
+
+```
+
+
+# lmer analysis
+
+```{r}
+head(bees2)
+
+
+mod1 <- lmer(freq ~ index*trt + bees2$lessThan50*trt +  (1|beeNum), data = bees2 )
+summary(mod1)
+
+plot(mod1)
+
+preds <- predict(mod1, re.form = NA)
+
+plot(bees2$index, preds, col = as.factor(bees2$trt))
+
+## gam
+library(mgcv)
+
+bees3 <- bees2[bees2$index < 50, ]
+bees3 <- bees2
+gam1 <- gam(bees3$freq ~ s(bees3$index, by = as.factor(bees3$trt)) + bees3$lessThan50 +
+                 s(as.factor(bees3$beeNum),bs = "re"))
+summary(gam1)
+
+
+par(mfrow = c(2,2))
+plot(gam1, residuals = FALSE, cex = 1)
+
+# get predictions, setting rand. effect to 0
+preds  = predict(gam1, exclude="s(as.factor(bees3$beeNum))")
+
+
+plot(bees3$index, preds)
+
+plot(y = residuals(gam1), bees2$index)
+
+```
+
+
+# Bootstrap (probably too simple to use for publication)
+```{r}
+head(beeAvgs)
+
+
+beeAvgs$difference = beeAvgs$Second50 - beeAvgs$First50
+
+ggplot(beeAvgs, aes(y = difference, x = trt)) + 
+     geom_boxplot()
+
+
+bootFun <- function(o){
+     beeSamp <- beeAvgs[sample(1:nrow(beeAvgs), replace = TRUE), ]
+     mns <- tapply(beeSamp$difference, INDEX = beeSamp$trt, mean, na.rm = TRUE)
+     return(diff(mns))
+}
+ 
+
+bootDiffs <- replicate(n = 100000, bootFun())    
+
+par(mfrow = c(1,1))
+hist(bootDiffs)
+abline(v = 0)
+
+mean(bootDiffs > 0)
+```
+
+
+# bootstrap different time steps and creat 95% CI for the mean for each group
+```{r, eval = FALSE}
+head(bees2)
+
+
+# for each index, make bootstrap 95% CI's
+indxFun <- function(idx) {
+     beeSmp <- bees2[bees2$index == idx, ]
+     beeSmp2 <- beeSmp[sample(1:nrow(beeSmp), replace = TRUE), ]
+     mns1 <- tapply(beeSmp2$freq, INDEX = beeSmp2$trt, mean, na.rm = TRUE)
+     return(mns1)
+}
+
+bootF2 <- function(o) t(sapply(1:100, indxFun))
+
+bootSamps <- replicate(n = 10000, bootF2())
+
+df1 <- as.data.frame(bootSamps)
+
+rewFirDF <- df1[, grep(pattern = "RewFir", colnames(df1))]
+rewSecDF <- df1[, grep(pattern = "RewSec", colnames(df1))]
+
+frQuantiles <- t(apply(rewFirDF, MARGIN = 1, FUN = quantile, c(0.025, 0.975)))
+seQuantiles <- t(apply(rewSecDF, MARGIN = 1, FUN = quantile, c(0.025, 0.975)))
+
+plot(x = 1:100, y = frQuantiles[, 1], type = 'l', ylim = c(300, 400))
+lines(x = 1:100, y = frQuantiles[, 2], type = 'l')
+
+lines(x = 1:100, y = seQuantiles[, 1], type = 'l', col = 'red')
+lines(x = 1:100, y = seQuantiles[, 2], type = 'l', col = 'red')
+
+# calculate mean
+
+meanVals <- t(sapply(1:100, function(idx){
+     beeSmp <- bees2[bees2$index == idx, ]
+     mns1 <- tapply(beeSmp$freq, INDEX = beeSmp$trt, mean, na.rm = TRUE)
+     return(mns1)
+}))
+
+meanVals
+
+lines(x = 1:100, y = meanVals[,1], lwd = 3)
+lines(x = 1:100, y = meanVals[,2], lwd = 3, col = 'red')
+
+
+plot(x = 1:100, y = meanVals[,2], lwd = 3, col = 'red', type = 'l')
+lines(x = 1:100, y = meanVals[,1], lwd = 3)
+
+```
+
+
+# A different bootstrap analysis -- resampling whole time-series
+```{r, eval = FALSE}
+beesList <- unique(bees2$beeNum)
+
+# for each index, make bootstrap 95% CI's
+indxFun <- function(o) {
+     beeListSample <- sample(beesList, replace = TRUE)
+     bootDF <- (lapply(beeListSample, function(x) return(bees2[bees2$beeNum == x, ])))
+     bootDF1 <- ldply(bootDF, data.frame)
+     
+     # calculate mean for each timepoint
+     meanVals <- t(sapply(X = 1:100, function(idx){
+          beeSmp <- bootDF1[bootDF1$index == idx, ]
+          mns1 <- tapply(beeSmp$freq, INDEX = beeSmp$trt, mean, na.rm = TRUE)
+          return(mns1)
+          }))
+
+     return(meanVals)
+}
+
+head(indxFun())
+
+bootSamps <- lapply(1:1000, indxFun)
+
+rewFirls <- lapply(bootSamps, function(x) x[,1])
+rewSecLs <- lapply(bootSamps, function(x) x[,2])
+
+dfir <- colMeans(do.call("rbind", rewFirls))
+dsec <- colMeans(do.call("rbind", rewSecLs))
+
+plot(x = 1:100, y = dfir, type = 'l')
+lines(x = 1:100, y = dsec, type = 'l', col = 'red')
+lines(x = 1:100, y = dfir, type = 'l')
+
+dfirQuants <- apply(X = do.call("rbind", rewFirls), MARGIN = 2, quantile, c(0.025, 0.975))
+dsec <- (do.call("rbind", rewSecLs))
+
+
+# put survival plot in background
+
+# get data about amount of pollen in different species
+
+```
+
+
+
+
+# amplitude analysis
+```{r}
+ggplot(bees2, aes(x = index, y = amp, color = trt)) +
+     geom_point(alpha = 0.1) + 
+     stat_smooth(method = "loess", span = 0.75)
+
+bees2$treatment <- mapvalues(bees2$trt, from = c("RewFir", "RewSec"), to = c("Rewarded_1st_50_Buzzes", "Rewarded_2nd_50_Buzzes"))
+
+ggplot(bees2, aes(x = index, y = amp, color = rewTF)) +
+     stat_smooth(method = "loess", span = 1) + 
+     xlab("Buzz Number") + 
+     ylab("Buzz Amplitude (V)") + 
+     facet_wrap(~treatment) + 
+     scale_color_viridis(name = "Rewarded Buzzes", 
+                         discrete = TRUE, begin = 0.2, end = 0.6)
+ggsave("beeRewards_Amplitude.png", width = 8, height = 5)
+
+```
+
+
+

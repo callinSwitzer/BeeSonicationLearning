@@ -33,7 +33,7 @@ packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effe
 ipak(packages)
 
 # set ggplot theme
-theme_set(theme_classic())
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
 
 # define data and figure directories
 dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
@@ -50,7 +50,20 @@ print(R.version)
 
 ```{r}
 new_df = read.csv(file.path(dataDir, "02_HeavyLight_cleaned.csv"))
+new_df$hive = as.factor(new_df$hive)
+new_df$treatment <- mapvalues(new_df$treatment, from = c("sham", "weighted"), to = c("Sham", "Weighted"))
 head(new_df)
+
+# calculate average number of each treatment
+ll = list(tapply(new_df$treatment, new_df$beeID, table))
+dd = data.frame(unlist(ll))
+dd$beeTrt = row.names(dd)
+dd$beeID = sapply(dd$beeTrt, FUN = function(x) strsplit(x, "\\.")[[1]][1])
+dd$trt = sapply(dd$beeTrt, FUN = function(x) strsplit(x, "\\.")[[1]][2])
+
+# shows average number of buzzes per treatment
+tapply(dd$unlist.ll., INDEX = dd$trt, mean)
+tapply(dd$unlist.ll., INDEX = dd$trt, sd) # sd for number of buzzes
 
 # show histograms of frequencies
 hist(new_df$freq, breaks = seq(215, 455, by = 10))
@@ -62,7 +75,7 @@ frqMeans
 
 
 # conver to long format for ggplot-ing
-frqLong <- melt(frqMeans, id.vars = "beeID", measure.vars =  c("sham", "weighted"), 
+frqLong <- melt(frqMeans, id.vars = "beeID", measure.vars =  c("Sham", "Weighted"), 
      variable.name = "trt", value.name = "frq")
 nrow(frqLong)
 
@@ -90,7 +103,7 @@ ampMeans$beeID <- row.names(ampMeans)
 ampMeans
 
 
-ampLong <- melt(ampMeans, id.vars = "beeID", measure.vars =  c("sham", "weighted"), 
+ampLong <- melt(ampMeans, id.vars = "beeID", measure.vars =  c("Sham", "Weighted"), 
                 variable.name = "trt", value.name = "amp")
 
 ggplot(ampLong, aes(x = trt, y = amp)) + 
@@ -118,30 +131,30 @@ Use BIC to select model (decide what interactions and covariates to use)
 
 Make sure that REML = FALSE when comparing BIC values
 
-```{r modeling}
-new_df$hive = as.factor(new_df$hive)
+Start with the biggest model of interest, and then see what predictors can be removed
 
-m1 = lmer(freq ~ treatment+IT+  hive + (1|beeID), data = new_df, REML = FALSE)
-summary(m1)
+```{r modeling}
 
 # interaction that may be important, based on domain knowledge
-m1_1 = lmer(freq ~ treatment*IT+  hive + (1|beeID), data = new_df, REML = FALSE)
-summary(m1_1)
+m0 = lmer(freq ~ treatment*IT+  hive + (1|beeID), data = new_df, REML = FALSE)
 
-BIC(m1, m1_1) # stay with m1 -- no interaction
+# no interaction
+m1 = lmer(freq ~ treatment+IT+  hive + (1|beeID), data = new_df, REML = FALSE)
+BIC(m0, m1) # stay with m1 -- no interaction
+anova(m0, m1) # this p-value is very borderline -- we're being 
+# conservative to avoid overfitting by using BIC
 
 m2 = lmer(freq ~ hive + IT+ (1|beeID), data = new_df, REML = FALSE)
 BIC(m1, m2) # treatment doesn't make the model better
 
-anova(m1, m2) # p-value for paper
-
+anova(m1, m2) # p-value for paper -- probably don't need to report
 
 # p-value for hive
 m3 = lmer(freq ~ treatment + (1|beeID), data = new_df, REML = FALSE)
 anova(m1, m3)
 
 
-# diagnostics
+# diagnostics -- use REML = TRUE
 m1 <- update(m1, .~., REML =TRUE)
 summary(m1) # summary for paper
 plot(m1)
@@ -156,9 +169,8 @@ sjp.lmer(m1, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 ### Bootstrap CI's for figure for paper
 
 ```{r bootstrap, cache = TRUE}
-
 # set number of bootstrap replicates for models
-nbootSims = 10
+nbootSims = 1000
 
 table(new_df$hive) # more trials from hive 3
 
@@ -167,18 +179,24 @@ table(new_df$hive) # more trials from hive 3
 
 # calculate an average IT for prediction
 ITmean = mean(tapply(new_df$IT, INDEX = new_df$beeID, FUN = function(x) x[1] ))
-pframe <- data.frame(treatment = levels(droplevels(new_df$treatment)),IT = ITmean, hive = factor(3, levels = levels(new_df$hive)),  beeID = 99999)
+
+pframe <- data.frame(treatment = levels(droplevels(new_df$treatment)),
+                     IT = ITmean, 
+                     hive = factor(3, levels = levels(new_df$hive)),  
+                     beeID = 99999)
 pframe$freq <- 0
 pp <- predict(m1, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
 
 
 ### Calculate CI's (using bootstrap, not accounting for random effects)
 bb2 <- bootMer(m1, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
 bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe$blo<-bb2_se[1,]
 pframe$bhi<-bb2_se[2,]
 pframe$predMean <- pp
 pframe <- pframe[, c('treatment', "blo", "bhi", "predMean")]
+pframe
 ```
 
 ### Make frequency plots for paper
@@ -188,10 +206,7 @@ pframe <- pframe[, c('treatment', "blo", "bhi", "predMean")]
 g0 <- ggplot(pframe, aes(x=treatment, y=predMean))+
      geom_point()+ 
      labs(y = "Sonication frequency (Hz)", x = "Flower treatment") + 
-     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
-     theme(axis.text.x = element_text(angle = 45, hjust = 1), 
-           legend.position = 'none') +
-     theme_classic() 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)
 g0
 ggsave(plot = g0, filename = file.path(figDir, "HeavyLight_PredsAndCI_freq.pdf"), width =4, height = 3)
 ```
@@ -199,26 +214,27 @@ ggsave(plot = g0, filename = file.path(figDir, "HeavyLight_PredsAndCI_freq.pdf")
 
 ### Modeling amplitude with lmer
 
-
-First, convert amplitude (originally measured in Volts) to m/s/s, using the accelerometer calibration
-
-<img src = "/Users/cswitzer/Dropbox/SonicationBehavior/accelerometer_calib.jpeg" width="300" />
-
 ```{r modeling-amp}
+# log transform for acceleration helps model fit better
+# start with large model (including interaction)
+ma0 = lmer(log(amp_acc) ~ treatment * IT +  hive + (1|beeID), data = new_df, REML = FALSE)
 
-
-# log transform helps model fit better
 ma1 = lmer(log(amp_acc) ~ treatment + IT +  hive + (1|beeID), data = new_df, REML = FALSE)
-ma1_1 = lmer(log(amp_acc) ~ treatment * IT +  hive + (1|beeID), data = new_df, REML = FALSE)
-BIC(ma1, ma1_1) # interaction is ever so better
 
-ma2 <- update(ma1_1, .~. - hive)
-BIC(ma1_1, ma2) # hive not important
+BIC(ma0, ma1) # interaction, ma0, is better
 
+# pval for interaction (in case paper needs it)
+anova(ma0, ma1)
+
+ma2 <- update(ma0, .~. - hive)
+BIC(ma0, ma2) # hive not important
+
+#pval for hive
+anova(ma0, ma2)
+
+# fit with reml = TRUE for summarizing
 ma3 <- update(ma2,.~., REML = TRUE)
 summary(ma3) # final model to report
-
-
 
 # diagnostics
 plot(ma3)
@@ -238,19 +254,22 @@ sjp.lmer(ma3, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 # set number of bootstrap replicates for models
 nbootSims2 = 1000
 
-# using hive 5, since it's the one with the most data
-pframe <- data.frame(treatment = levels(droplevels(new_df$treatment)), IT = ITmean, hive = factor(4, levels = levels(new_df$hive)),  beeID = 99999)
+# using hive 3, since it's the one with the most data
+pframe <- data.frame(treatment = levels(droplevels(new_df$treatment)), IT = ITmean, hive = factor(3, levels = levels(new_df$hive)),  beeID = 99999)
 pframe$amp_acc <- 0
-pp <- predict(ma3, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
+# exponentiate to put on original scale
+pp <- exp(predict(ma3, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
 
 
 ### Calculate CI's (using bootstrap, not accounting for random effects)
 bb2 <- bootMer(ma3, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
 bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
-pframe$blo<-bb2_se[1,]
-pframe$bhi<-bb2_se[2,]
+pframe$blo<- exp(bb2_se[1,]) # exponentiate to put on original scale
+pframe$bhi<- exp(bb2_se[2,])
 pframe$predMean <- pp
 pframe <- pframe[, c('treatment', "blo", "bhi", "predMean")]
+pframe
 ```
 
 ### Make amplitude plots for paper
@@ -262,15 +281,14 @@ print(ITmean)
 ga0 <- ggplot(pframe, aes(x=treatment, y=predMean))+
      geom_point()+ 
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
-     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
-     theme(axis.text.x = element_text(angle = 45, hjust = 1), 
-           legend.position = 'none') +
-     theme_classic() + 
-  annotate(geom="text", x=c(1,2), y=c(0, 0) + 50, label=c("a", "b"),
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) +
+  annotate(geom="text", x=c(1,2), y=c(0, 0) + 40, label=c("a", "b"),
                 color="black") 
 ga0
 ggsave(plot = ga0, filename = file.path(figDir, "HeavyLight_PredsAndCI_amp.pdf"), width =4, height = 3)
 ```
 
-
+```{r}
+sessionInfo()
+````
 
