@@ -40,10 +40,17 @@ theme_set(theme_bw())
 dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
 figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
 
+print(paste("last run ", Sys.time()))
+print(R.version)
+```
 
+
+### Read in data and double check it
+
+```{r}
 sl <- read.csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
 head(sl)
-dim(sl)
+dim(sl) # should be 24303, 20
 
 
 table(sl$hive, useNA = 'always')
@@ -59,11 +66,26 @@ sl[sl$freq < 220 | sl$freq > 450,] # should have 0 rows
 
 # look at treatments
 xtabs(~sl$beeCol+ trt, data = sl )
+
+# find percentage reward by treatment
+mean(grepl("[tT]", as.character(sl$rewTF))) # overall mean
+
+# percentage that were rewarded by treatment
+tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, mean)
+
+# total number of trials for each treatment
+tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, length)
+
+# total number of rewards per treatment
+tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, FUN = function(x) sum(x))
+
+# total number of trials that were unrewarded per treatment
+tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, FUN = function(x) sum(!x))
 ```
 
-# Visualizations
+### Visualizations and modeling
 
-```{r}
+```{r aggregate, cache = TRUE}
 # calculate trial averages and plot
 sl$colNum = paste(sl$beeCol, sl$hive, sep = "_")
 sl$trt <- as.character(sl$trt)
@@ -83,8 +105,6 @@ agg_sm = aggdata[aggdata$trialNum <= 2, ]
 rownames(agg_sm) = 1:nrow(agg_sm)
 agg_sm
 
-
-aggdata[aggdata$colNum == "whitepink_5", ]
 
 
 agg_sm[duplicated(data.frame(agg_sm$colNum, agg_sm$trialNum)), ]
@@ -167,7 +187,7 @@ sl$trt2 = mapvalues(sl$trt, from = c("full", "full_2", "high", "low"),
 # summary for paper
 # fit a varying slope and intercept for colNum (bee ID), and allow the slope of the trialNum
 # variable to vary by colNum (beeID)
-m2 = lmer(freq ~ trt2 + as.factor(hive) + trialNum +  (1+trialNum|colNum), data = sl)
+m2 = lmer(freq ~ trt2 + as.factor(hive) + trialNum + IT_imputed + (1+trialNum|colNum), data = sl, REML = FALSE)
 summary(m2)
 
 # this model estimates a global intercept
@@ -177,15 +197,19 @@ summary(m2)
 # the correlation between intercept of trialNum across levels of colNum
 
 
+m2_1 = lmer(freq ~ trt2* IT_imputed + as.factor(hive) + trialNum  + (1+trialNum|colNum), data = sl, REML = FALSE)
+summary(m2_1)
 
-AIC(m2) #245976.3
+
+BIC(m2, m2_1) #245963
+anova(m2, m2_1)
 
 
-m3 = lmer(freq ~  as.factor(hive) + trialNum +  (1+trialNum|colNum), data = sl)
+m3 = lmer(freq ~  as.factor(hive) + trialNum + IT_imputed + (1+trialNum|colNum), data = sl)
 summary(m3)
 anova(m2,m3) # p-val for paper
 
-AIC(m3) #246086.5
+AIC(m3) #246074.8
 
 
 plot(m2)
@@ -207,22 +231,27 @@ ggplot(aggdata[aggdata$trialNum <= 2, ], aes(x = trialNum, y = freq)) +
 ```
 
 
-# Generate CI's
-```{r, cache = TRUE}
+### Generate CI's
+```{r bootstrap, cache = TRUE}
+
+
+# set number of bootstrap samples
+nbootSims = 1000
+
 # change hive to factor
 sl$hive = as.factor(sl$hive)
-m2 = lmer(freq ~ trt2 + hive + trialNum +  (1+trialNum|colNum), data = sl)
+m2 = lmer(freq ~ trt2 + hive + trialNum + IT_imputed+  (1+trialNum|colNum), data = sl)
 summary(m2)
 
-
+ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
 # using hive 5, since it's the one with the most data
-pframe <- data.frame(trt2 = levels(droplevels(sl$trt2)), hive = factor(5, levels = levels(sl$hive)),  colNum = 99999, trialNum = 2)
+pframe <- data.frame(trt2 = levels(droplevels(sl$trt2)), hive = factor(5, levels = levels(sl$hive)), IT_imputed = ITmean,  colNum = 99999, trialNum = 2)
 pframe$freq <- 0
 pp <- predict(m2, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
 
 
 ### Calculate CI's (using bootstrap, not accounting for random effects)
-bb2 <- bootMer(m2, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = 1000)
+bb2 <- bootMer(m2, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims)
 bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe$blo<-bb2_se[1,]
 pframe$bhi<-bb2_se[2,]
@@ -230,7 +259,8 @@ pframe$predMean <- pp
 pframe <- pframe[, c('trt2', "blo", "bhi", "predMean")]
 ```
 
-## Make plots
+### Make plots for paper
+
 ```{r}
 #plot 95% confidence intervals
 # "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
@@ -245,10 +275,10 @@ g0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
            legend.position = 'none') +
      theme_classic() + 
-  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 352, label=c("a", "b", "c"),
+  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 355, label=c("a", "b", "c"),
                 color="black") 
 g0
-ggsave(plot = g0, filename = paste0(figDir, "/SonicationFreqPredsAndCI.pdf"), width = 5, height = 4)
+ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI.pdf"), width = 5, height = 4)
 
 
 
@@ -258,7 +288,8 @@ ggsave(plot = g0, filename = paste0(figDir, "/SonicationFreqPredsAndCI.pdf"), wi
 ee <- as.data.frame(Effect(c("trt2"), 
                            fixed.predictors =list(given.values = c(hive4 = 0, 
                                                                    hive5 = 1, 
-                                                                   trialNum = 2)),  
+                                                                   trialNum = 2, 
+                                                                   IT_imputed = ITmean)),  
                            m2) )
 
 table(sl$hive)
@@ -276,7 +307,203 @@ g1 <- ggplot(ee, aes(x=trt2, y=fit))+
                 color="black") 
 g1
 
+```
 
-#refref: todo -- find percentage of buzzes that were rewarded for each treatment
+### Analysis for amplitude
+
+
+```{r ampAnalysis}
+
+# refref: here try log amp_acc and REML = FALSE with BIC
+sl$hive <- as.factor(sl$hive)
+
+maa1 = lmer(amp_acc ~ trt2 + IT_imputed + hive + trialNum  +(1+trialNum|colNum), data = sl)
+summary(maa1) 
+AIC(maa1) 
+
+# interaction
+maa1_1 = lmer(amp_acc ~ trt2*IT_imputed + hive + trialNum  +(1+trialNum|colNum), data = sl)
+summary(maa1_1) 
+AIC(maa1_1, maa1) 
+anova(maa1_1, maa1) 
+
+
+maa2 = update(maa1, .~. - trt2)
+summary(maa2)
+AIC(maa2)
+
+anova(maa1, maa2) # p-value for paper for acceleration
+
+
+# p-value for hive for acceleration
+maa3 = update(maa1, .~. -hive)
+anova(maa1, maa3)
+
+
+# diagnostics
+plot(maa1)
+qqnorm(ranef(maa1)$colNum[[1]])
+qqline(ranef(maa1)$colNum[[1]])
+
+
+sjp.lmer(maa1) # plot random effects to find any outliers
+sjp.lmer(maa1, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+
+
+# post-hoc tests -- pvals for paper
+summary(glht(maa1, linfct = mcp(trt2 = "Tukey")), test = adjusted("none"))
+```
+
+
+### Generate CI's for amplitude
+
+```{r bootstrapAmp, cache = TRUE}
+# set number of bootstrap samples
+nbootSims2 = 1000
+
+# using hive 5, since it's the one with the most data
+pframe <- data.frame(trt2 = levels(droplevels(sl$trt2)), 
+                     hive = factor(5, levels = levels(sl$hive)), 
+                     IT_imputed = ITmean,  colNum = 99999, trialNum = 2)
+pframe$amp_acc <- 0
+pp <- predict(maa1, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(maa1, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<-bb2_se[1,]
+pframe$bhi<-bb2_se[2,]
+pframe$predMean <- pp
+pframe <- pframe[, c('trt2', "blo", "bhi", "predMean")]
+```
+
+
+### Make plots for amplitude for paper
+
+```{r amplitudePlots}
+#plot 95% confidence intervals
+# "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
+pframe$trt3 = mapvalues(pframe$trt2, from = c("full", "high", "low"), 
+                        to = c("Full range\n(220 - 450 Hz)", "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))
+
+pframe
+ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
+     geom_point()+ 
+     labs( y = expression ("Sonication amplitude "(m~s^{-2})), x = "Frequency range for reward") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
+     theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+           legend.position = 'none') +
+     theme_classic() + 
+  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 75, label=c("a", "b", "c"),
+                color="black") 
+ga0
+ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI.pdf"), width = 5, height = 4)
+
+
+
+tapply(sl$amp, INDEX = sl$trt, mean)
 
 ```
+
+
+```{r}
+
+# conversion factor = 10.17 mv/(m/s/s)
+sl$amp_acc = (sl$amp * 1000) / 10.17
+sl$hive <- as.factor(sl$hive)
+
+
+aggdata <- aggregate(sl$amp_acc, by=list(colNum = sl$colNum,trialNum =sl$trialNum, trt = sl$trt), FUN=mean, na.rm=TRUE)
+colnames(aggdata)[colnames(aggdata) == "x"] = "amp"
+
+aggdata_sd <- aggregate(sl$amp_acc, by=list(colNum = sl$colNum,trialNum =sl$trialNum, trt = sl$trt), FUN=sd, na.rm=TRUE)
+colnames(aggdata_sd)[colnames(aggdata_sd) == "x"] = "amp_sd"
+
+aggdata = merge(aggdata, aggdata_sd)
+aggdata = aggdata[order(aggdata$colNum, aggdata$trialNum, decreasing = FALSE), ]
+agg_sm = aggdata[aggdata$trialNum <= 2, ]
+rownames(agg_sm) = 1:nrow(agg_sm)
+agg_sm
+
+
+
+agg_sm[duplicated(data.frame(agg_sm$colNum, agg_sm$trialNum)), ]
+
+ggplot(agg_sm, aes(x = trt, y = amp, fill = trialNum > 1)) +
+  geom_boxplot(alpha = 0.2) + 
+  geom_point(aes(color = trialNum>1)) + 
+  geom_line(aes(group = colNum))
+
+
+diffdf <- sapply(unique(agg_sm$colNum), FUN = function(x){
+  tmp = agg_sm[agg_sm$colNum == x, ]
+  if(nrow(tmp) <= 1)
+    diff = NA
+  else
+    diff = tmp$amp[tmp$trialNum == 2] - tmp$amp[tmp$trialNum == 1]
+  return(diff)
+})
+
+trtDF = sapply(unique(agg_sm$colNum), FUN = function(x){
+  tmp = agg_sm[agg_sm$colNum == x, ]
+  ttrs = paste(tmp$trt[tmp$trialNum == 1], tmp$trt[tmp$trialNum == 2], sep = "_")
+  return(ttrs)
+})
+
+buzzdiffs = data.frame(trtDF, diffdf)
+
+ggplot(buzzdiffs, aes(x = trtDF, y= diffdf)) + 
+  geom_boxplot() + 
+  geom_point()
+
+         
+agg2 = aggregate(sl$amp_acc, by=list(colNum = sl$colNum, fullTrt = sl$trt == "full", trt = sl$trt), FUN=mean, na.rm=TRUE)
+colnames(agg2)[colnames(agg2) == "x"] = "amp"
+agg2$trt = as.character(agg2$trt)
+
+diffdf <- t(as.data.frame(t(sapply(unique(agg2$colNum), FUN = function(x){
+  tmp = agg2[agg2$colNum == x, ]
+  if(nrow(tmp) <= 1)
+    return(NA)
+  if (length(unique(tmp$trt)) > 2){
+    tmp = tmp[tmp$trt != "full_2", ]
+  }
+  diff =  tmp$amp[!tmp$fullTrt] - tmp$amp[tmp$fullTrt]
+  return(diff)
+
+}))))
+
+length(diffdf)
+
+trtDF = sapply(unique(agg2$colNum), FUN = function(x){
+  tmp = agg2[agg2$colNum == x, ]
+  if (length(unique(tmp$trt)) > 2){
+    tmp = tmp[tmp$trt != "full_2", ]
+  }
+  ttrs = paste(tmp$trt[tmp$fullTrt], tmp$trt[!tmp$fullTrt], sep = "_")
+  return(ttrs)
+})
+
+length(trtDF)
+
+buzzdiffs = data.frame(trtDF, diffdf)
+tapply(buzzdiffs$diffdf, INDEX = buzzdiffs$trtDF, mean)
+
+ggplot(droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]), aes(x = trtDF, y= as.numeric(diffdf))) + 
+  geom_boxplot() + 
+  geom_point()
+```
+
+
+## refref todo: Plot amplitude vs. frequency for initial trial, accounting for size
+
+```{r}
+ggplot(sl[sl$trialNum == 1, ], aes(x = freq, y = amp_acc)) + 
+  geom_point(position = position_jitter(width = 3), alpha = 0.2) + 
+  theme_classic() + 
+  geom_smooth(aes(group = trt2)) + 
+  labs( y = expression ("Sonication amplitude "(m~s^{-2})), x = "Frequency (Hz)")
+
+```
+
