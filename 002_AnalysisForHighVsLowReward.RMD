@@ -208,7 +208,7 @@ ggplot(aggdata[aggdata$trialNum <= 2, ], aes(x = trialNum, y = freq)) +
 
 
 # Generate CI's
-```{r}
+```{r, cache = TRUE}
 # change hive to factor
 sl$hive = as.factor(sl$hive)
 m2 = lmer(freq ~ trt2 + hive + trialNum +  (1+trialNum|colNum), data = sl)

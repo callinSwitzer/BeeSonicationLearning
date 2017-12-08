@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" />
-<title>003_CleanHeavyLightMetaData</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
+<title>004_CombineTrialsHeavyLightData</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
 
 <style type="text/css">
@@ -11778,7 +11778,8 @@ div#notebook {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="Callin-Switzer">Callin Switzer<a class="anchor-link" href="#Callin-Switzer">&#182;</a></h1><p>Clean the heavy/light flower metadata and save to file</p>
+<h1 id="Callin-Switzer">Callin Switzer<a class="anchor-link" href="#Callin-Switzer">&#182;</a></h1><p>Read in all csv files from individual trials for heavy/light flower experiment, and 
+combine into a single long dataset, combined with metadata</p>
 
 </div>
 </div>
@@ -11789,14 +11790,22 @@ div#notebook {
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">matplotlib</span> <span class="k">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
+<span class="o">%</span><span class="k">matplotlib</span> inline
+
 <span class="kn">import</span> <span class="nn">os</span>
 <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="k">import</span> <span class="n">datetime</span>
 <span class="kn">import</span> <span class="nn">sys</span>
 <span class="kn">import</span> <span class="nn">csv</span>
-
-<span class="kn">from</span> <span class="nn">datetime</span> <span class="k">import</span> <span class="n">datetime</span>
+<span class="kn">import</span> <span class="nn">seaborn</span> <span class="k">as</span> <span class="nn">sns</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">Counter</span>
 
 <span class="nb">print</span><span class="p">(</span><span class="n">sys</span><span class="o">.</span><span class="n">version</span><span class="p">,</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
 
 <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;last run on &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">now</span><span class="p">))</span>
@@ -11817,7 +11826,7 @@ div#notebook {
 <pre>3.6.1 |Anaconda custom (64-bit)| (default, May 11 2017, 13:04:09) 
 [GCC 4.2.1 Compatible Apple LLVM 6.0 (clang-600.0.57)] 
 
-last run on 2017-12-07 21:29:32.201084
+last run on 2017-12-07 21:30:53.463660
 </pre>
 </div>
 </div>
@@ -11834,6 +11843,7 @@ last run on 2017-12-07 21:29:32.201084
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># define directories</span>
 <span class="n">baseDir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span>
 <span class="n">dataDir</span> <span class="o">=</span> <span class="s1">&#39;/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData/SonicationBehavior_HeavyLight/&#39;</span>
+<span class="n">metadataDir1</span> <span class="o">=</span> <span class="s1">&#39;/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData/BeeMetaData/&#39;</span>
 </pre></div>
 
 </div>
@@ -11877,7 +11887,7 @@ last run on 2017-12-07 21:29:32.201084
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h3 id="Clean-bee-metadata">Clean bee metadata<a class="anchor-link" href="#Clean-bee-metadata">&#182;</a></h3>
+<h3 id="Read-in-bee-metadata">Read in bee metadata<a class="anchor-link" href="#Read-in-bee-metadata">&#182;</a></h3>
 </div>
 </div>
 </div>
@@ -11886,10 +11896,10 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[4]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">metadataFile</span> <span class="o">=</span> <span class="s2">&quot;Raw_BeeMetadata_HeavyLightFlowers.csv&quot;</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">metadataFile</span> <span class="o">=</span> <span class="n">metadataDir1</span> <span class="o">+</span> <span class="s2">&quot;HeavyLight_BeeMetaData_cleaned.csv&quot;</span>
 
 <span class="c1"># read in data</span>
-<span class="n">hlf</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">dataDir</span> <span class="o">+</span> <span class="n">metadataFile</span><span class="p">,</span> <span class="n">header</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">index_col</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
+<span class="n">mdta</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">metadataFile</span><span class="p">,</span> <span class="n">header</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">index_col</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span>
 </pre></div>
 
 </div>
@@ -11902,7 +11912,7 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[5]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">hlf</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mdta</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 
 </div>
@@ -11936,125 +11946,65 @@ last run on 2017-12-07 21:29:32.201084
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>dateFrozenOrMarked</th>
-      <th>trainFlowerPrepTime</th>
-      <th>trainStartTime</th>
+      <th>BeeColorNum</th>
+      <th>IT</th>
       <th>Hive</th>
       <th>FlowerType1</th>
       <th>FlowerType2</th>
-      <th>FlowerSwitchTime</th>
-      <th>switchRewardNum</th>
-      <th>trainingThreshold</th>
-      <th>BeeColorNum</th>
-      <th>IT</th>
-      <th>DateIT_Recorded</th>
-      <th>notes</th>
-      <th>trainNumRewardVisits</th>
-      <th>trialEndTime</th>
-      <th>trainingFile</th>
-      <th>notes.1</th>
+      <th>trainingFile_</th>
+      <th>dateFrozenOrMarked</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <th>0</th>
+      <td>gold</td>
+      <td>4.13</td>
+      <td>3</td>
+      <td>weighted</td>
+      <td>sham</td>
+      <td>BeeGold_26Sept2016_Hive3_W_S/2016_09_26__17_14...</td>
       <td>26-Sep-16</td>
-      <td>1418.0</td>
-      <td>NaN</td>
-      <td>3.0</td>
-      <td>solanum-glued</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>none</td>
-      <td>orange</td>
-      <td>3.71</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>NaN</td>
     </tr>
     <tr>
       <th>1</th>
-      <td>26-Sep-16</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>3.0</td>
-      <td>weighted-solanum-glued</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>none</td>
-      <td>orange</td>
-      <td>3.71</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>same bee as above</td>
+      <td>1</td>
+      <td>4.07</td>
+      <td>4</td>
+      <td>weighted</td>
+      <td>sham</td>
+      <td>Bee1_27Sept_Hive4_W_S/2016_09_27__10_52_05_amp...</td>
+      <td>27-Sep-16</td>
     </tr>
     <tr>
       <th>2</th>
-      <td>26-Sep-16</td>
-      <td>1642.0</td>
-      <td>NaN</td>
-      <td>3.0</td>
-      <td>weighted-solanum-glued</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>none</td>
-      <td>gold</td>
-      <td>4.13</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>1651.0</td>
-      <td>NaN</td>
-      <td>NaN</td>
+      <td>2</td>
+      <td>4.42</td>
+      <td>4</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee2_27Sept_Hive4_S_W/2016_09_27__11_54_44_amp...</td>
+      <td>27-Sep-16</td>
     </tr>
     <tr>
       <th>3</th>
-      <td>26-Sep-16</td>
-      <td>1653.0</td>
-      <td>1703.0</td>
-      <td>4.0</td>
-      <td>sham-weighted_solanum_glued</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>white</td>
-      <td>3.38</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>1712.0</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>NaN</td>
+      <td>3</td>
+      <td>4.27</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee3_28Sept_hive3_S_W/2016_09_28__08_33_35_amp...</td>
+      <td>28-Sep-16</td>
     </tr>
     <tr>
       <th>4</th>
-      <td>26-Sep-16</td>
-      <td>1713.0</td>
-      <td>NaN</td>
-      <td>3.0</td>
+      <td>4</td>
+      <td>4.27</td>
+      <td>3</td>
       <td>weighted</td>
       <td>sham</td>
-      <td>NaN</td>
-      <td>24</td>
-      <td>none</td>
-      <td>gold</td>
-      <td>4.13</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>1732.0</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>at reward #24, the bee started buzzing on a no...</td>
+      <td>Bee4_28Sept2016_Hive3_W_S/2016_09_28__08_45_02...</td>
+      <td>28-Sep-16</td>
     </tr>
   </tbody>
 </table>
@@ -12072,19 +12022,90 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[6]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># discard rows where I have noted that they should be discarded</span>
-<span class="n">discc</span> <span class="o">=</span> <span class="p">[]</span>
-<span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">hlf</span><span class="p">)):</span>
-    <span class="n">sst</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">hlf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ii</span><span class="p">,:])</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">))</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
-    <span class="k">if</span> <span class="s2">&quot;discard&quot;</span> <span class="ow">in</span> <span class="n">sst</span><span class="p">:</span>
-        <span class="n">discc</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">discc</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">NoFlightFolder</span> <span class="o">=</span> <span class="s2">&quot;/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData/SonicationBehavior_HeavyLight_NoFlights/&quot;</span>
 
-<span class="n">hlf</span><span class="p">[</span><span class="s2">&quot;discardRow&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">discc</span>
+<span class="n">folders</span> <span class="o">=</span> <span class="n">mdta</span><span class="o">.</span><span class="n">trainingFile_</span>
+
+<span class="c1"># define subfolders</span>
+<span class="n">fldrs2</span> <span class="o">=</span> <span class="p">[</span><span class="n">folders</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">folders</span><span class="p">))]</span>
+
+<span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">folders</span><span class="p">)):</span>
+    <span class="n">tmpDF</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_table</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataDir</span><span class="p">,</span> <span class="n">folders</span><span class="p">[</span><span class="n">ii</span><span class="p">]),</span> <span class="n">header</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">sep</span> <span class="o">=</span> <span class="s1">&#39;,&#39;</span><span class="p">)</span>
+
+    <span class="c1"># add folder name to data frame</span>
+    <span class="n">tmpDF</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span> <span class="o">=</span> <span class="n">folders</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span>
+    <span class="n">fcontents</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataDir</span><span class="p">,</span><span class="n">fldrs2</span><span class="p">[</span><span class="n">ii</span><span class="p">]))</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">f</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)]</span>
+    <span class="n">folderInFolder</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">fcontents</span> <span class="k">if</span> <span class="ow">not</span> <span class="s1">&#39;ampFreq.txt&#39;</span> <span class="ow">in</span> <span class="n">x</span><span class="p">]</span>
+
+    <span class="c1"># list files in inner folder</span>
+    <span class="n">accRecFiles</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataDir</span><span class="p">,</span> <span class="n">fldrs2</span><span class="p">[</span><span class="n">ii</span><span class="p">],</span> <span class="n">folderInFolder</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">x</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)]</span>
+    <span class="n">accRecFiles</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="n">tmpDF</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span> <span class="o">=</span> <span class="n">accRecFiles</span>
+
+    <span class="c1"># remove wingbeats</span>
+    <span class="n">tmpDF2</span> <span class="o">=</span> <span class="n">tmpDF</span><span class="o">.</span><span class="n">loc</span><span class="p">[(</span><span class="n">tmpDF</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">220</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">tmpDF</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">450</span><span class="p">)]</span>
+
+    <span class="c1"># renumber index</span>
+    <span class="n">tmpDF2</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">tmpDF2</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+
+    <span class="c1"># write to .csv</span>
+    <span class="n">tmpDF2</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="n">NoFlightFolder</span> <span class="o">+</span> <span class="n">fldrs2</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;.csv&#39;</span><span class="p">,</span> 
+                 <span class="n">header</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">index</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">ii</span><span class="p">)</span>
 </pre></div>
 
 </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+</pre>
+</div>
+</div>
+
 </div>
 </div>
 
@@ -12094,11 +12115,150 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[7]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">hlf2</span><span class="o">=</span> <span class="n">hlf</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="o">~</span><span class="n">hlf</span><span class="o">.</span><span class="n">discardRow</span><span class="p">,</span> <span class="p">:]</span>
-<span class="n">hlf2</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">inplace</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1">## combine csv&#39;s all into a single file</span>
+<span class="n">csvDir</span> <span class="o">=</span> <span class="n">NoFlightFolder</span>
+
+<span class="n">csvFiles</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">csvDir</span><span class="p">)</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.csv&#39;</span><span class="p">)]</span>
+
+<span class="n">np_array_list</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">file_</span> <span class="ow">in</span> <span class="n">csvFiles</span><span class="p">:</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">csvDir</span><span class="p">,</span> <span class="n">file_</span><span class="p">),</span><span class="n">index_col</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">np_array_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">as_matrix</span><span class="p">())</span>
+
+<span class="n">comb_np_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span><span class="n">np_array_list</span><span class="p">)</span>
+<span class="n">big_frame</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">comb_np_array</span><span class="p">)</span>
+
+<span class="n">big_frame</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;index&#39;</span><span class="p">,</span> <span class="s1">&#39;freq&#39;</span><span class="p">,</span> <span class="s1">&#39;amp&#39;</span><span class="p">,</span> <span class="s1">&#39;datetime&#39;</span><span class="p">,</span> <span class="s1">&#39;rewNum&#39;</span><span class="p">,</span> <span class="s1">&#39;rewTF&#39;</span><span class="p">,</span> <span class="s1">&#39;lowRewAmp&#39;</span><span class="p">,</span> <span class="s1">&#39;highrewAmp&#39;</span><span class="p">,</span> <span class="s1">&#39;BeeNumCol&#39;</span><span class="p">,</span> <span class="s1">&#39;accFile&#39;</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">big_frame</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="c1"># should be 2360 rows</span>
+<span class="n">big_frame</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 
 </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>(2360, 10)
+</pre>
+</div>
+</div>
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[7]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>index</th>
+      <th>freq</th>
+      <th>amp</th>
+      <th>datetime</th>
+      <th>rewNum</th>
+      <th>rewTF</th>
+      <th>lowRewAmp</th>
+      <th>highrewAmp</th>
+      <th>BeeNumCol</th>
+      <th>accFile</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>250</td>
+      <td>0.17945</td>
+      <td>2016_09_28__09_59_13_112</td>
+      <td>1</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_13_112_220_450_test.txt</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>300</td>
+      <td>0.56657</td>
+      <td>2016_09_28__09_59_14_520</td>
+      <td>2</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_14_520_220_450_test.txt</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3</td>
+      <td>400</td>
+      <td>0.68371</td>
+      <td>2016_09_28__09_59_15_030</td>
+      <td>3</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_030_220_450_test.txt</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>4</td>
+      <td>410</td>
+      <td>0.80118</td>
+      <td>2016_09_28__09_59_15_707</td>
+      <td>4</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_707_220_450_test.txt</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>5</td>
+      <td>370</td>
+      <td>0.52666</td>
+      <td>2016_09_28__09_59_16_277</td>
+      <td>5</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_16_277_220_450_test.txt</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
 </div>
 </div>
 
@@ -12108,14 +12268,98 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[8]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># remove preliminary trials</span>
-<span class="n">rightFlowerType</span> <span class="o">=</span> <span class="p">[</span><span class="n">hlf2</span><span class="o">.</span><span class="n">FlowerType1</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;sham&quot;</span><span class="p">,</span> <span class="s2">&quot;weighted&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">hlf2</span><span class="p">))]</span>
-
-<span class="n">hlf3</span> <span class="o">=</span> <span class="n">hlf2</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">rightFlowerType</span><span class="p">,</span> <span class="p">]</span>
-<span class="n">hlf3</span> <span class="o">=</span> <span class="n">hlf3</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># plot histogram of frequencies</span>
+<span class="n">vls</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">big_frame</span><span class="p">[</span><span class="s2">&quot;freq&quot;</span><span class="p">][</span><span class="n">ii</span><span class="p">])</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">big_frame</span><span class="p">))]</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">vls</span><span class="p">,</span> <span class="n">bins</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">215</span><span class="p">,</span> <span class="mi">455</span><span class="p">,</span> <span class="mi">10</span><span class="p">))</span>
+<span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </pre></div>
 
 </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt"></div>
+
+
+
+<div class="output_png output_subarea ">
+<img src="data:image/png;base64,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
+ijPoJam4/welreoUOC1jjQAAAABJRU5ErkJggg==
+"
+>
+</div>
+
+</div>
+
 </div>
 </div>
 
@@ -12125,8 +12369,8 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[9]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># get training filenames (without paths)</span>
-<span class="n">tfl</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;/&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">hlf3</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ii</span><span class="p">,</span> <span class="s2">&quot;trainingFile&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">:])</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">hlf3</span><span class="p">))]</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># check to see if datetime and accFile agree</span>
+<span class="n">eqs</span> <span class="o">=</span> <span class="p">[</span><span class="n">big_frame</span><span class="p">[</span><span class="s1">&#39;datetime&#39;</span><span class="p">][</span><span class="n">ii</span><span class="p">][</span><span class="mi">1</span><span class="p">:</span><span class="mi">25</span><span class="p">]</span> <span class="o">==</span> <span class="n">big_frame</span><span class="p">[</span><span class="s1">&#39;accFile&#39;</span><span class="p">][</span><span class="n">ii</span><span class="p">][</span><span class="mi">0</span><span class="p">:</span><span class="mi">24</span><span class="p">]</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">big_frame</span><span class="p">[</span><span class="s1">&#39;datetime&#39;</span><span class="p">]))]</span>
 </pre></div>
 
 </div>
@@ -12139,10 +12383,28 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[10]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">hlf3</span><span class="p">[</span><span class="s2">&quot;trainingFile_&quot;</span><span class="p">]</span> <span class="o">=</span><span class="n">tfl</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">eqs</span><span class="p">))</span> <span class="c1"># should be zero if all of them match</span>
 </pre></div>
 
 </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[10]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>0</pre>
+</div>
+
+</div>
+
 </div>
 </div>
 
@@ -12152,7 +12414,8 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[11]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">hlf3</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># find the one that doesn&#39;t match</span>
+<span class="n">big_frame</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">eqs</span><span class="p">)]</span> <span class="c1"># now they all match</span>
 </pre></div>
 
 </div>
@@ -12186,138 +12449,19 @@ last run on 2017-12-07 21:29:32.201084
   <thead>
     <tr style="text-align: right;">
       <th></th>
-      <th>dateFrozenOrMarked</th>
-      <th>trainFlowerPrepTime</th>
-      <th>trainStartTime</th>
-      <th>Hive</th>
-      <th>FlowerType1</th>
-      <th>FlowerType2</th>
-      <th>FlowerSwitchTime</th>
-      <th>switchRewardNum</th>
-      <th>trainingThreshold</th>
-      <th>BeeColorNum</th>
-      <th>IT</th>
-      <th>DateIT_Recorded</th>
-      <th>notes</th>
-      <th>trainNumRewardVisits</th>
-      <th>trialEndTime</th>
-      <th>trainingFile</th>
-      <th>notes.1</th>
-      <th>discardRow</th>
-      <th>trainingFile_</th>
+      <th>index</th>
+      <th>freq</th>
+      <th>amp</th>
+      <th>datetime</th>
+      <th>rewNum</th>
+      <th>rewTF</th>
+      <th>lowRewAmp</th>
+      <th>highrewAmp</th>
+      <th>BeeNumCol</th>
+      <th>accFile</th>
     </tr>
   </thead>
   <tbody>
-    <tr>
-      <th>0</th>
-      <td>26-Sep-16</td>
-      <td>1713.0</td>
-      <td>NaN</td>
-      <td>3.0</td>
-      <td>weighted</td>
-      <td>sham</td>
-      <td>NaN</td>
-      <td>24</td>
-      <td>none</td>
-      <td>gold</td>
-      <td>4.13</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>1732.0</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>at reward #24, the bee started buzzing on a no...</td>
-      <td>False</td>
-      <td>BeeGold_26Sept2016_Hive3_W_S/2016_09_26__17_14...</td>
-    </tr>
-    <tr>
-      <th>1</th>
-      <td>27-Sep-16</td>
-      <td>1032.0</td>
-      <td>1052.0</td>
-      <td>4.0</td>
-      <td>weighted</td>
-      <td>sham</td>
-      <td>1055</td>
-      <td>25</td>
-      <td>NaN</td>
-      <td>1</td>
-      <td>4.07</td>
-      <td>NaN</td>
-      <td>switchNum is first rew num after switching</td>
-      <td>NaN</td>
-      <td>1059.0</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>frozen</td>
-      <td>False</td>
-      <td>Bee1_27Sept_Hive4_W_S/2016_09_27__10_52_05_amp...</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>27-Sep-16</td>
-      <td>1106.0</td>
-      <td>1155.0</td>
-      <td>4.0</td>
-      <td>sham</td>
-      <td>weighted</td>
-      <td>1157</td>
-      <td>35</td>
-      <td>NaN</td>
-      <td>2</td>
-      <td>4.42</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>1201.0</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>NaN</td>
-      <td>False</td>
-      <td>Bee2_27Sept_Hive4_S_W/2016_09_27__11_54_44_amp...</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>28-Sep-16</td>
-      <td>826.0</td>
-      <td>832.0</td>
-      <td>3.0</td>
-      <td>sham</td>
-      <td>weighted</td>
-      <td>835</td>
-      <td>32</td>
-      <td>none</td>
-      <td>3</td>
-      <td>4.27</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>838.0</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>NaN</td>
-      <td>False</td>
-      <td>Bee3_28Sept_hive3_S_W/2016_09_28__08_33_35_amp...</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>28-Sep-16</td>
-      <td>841.0</td>
-      <td>845.0</td>
-      <td>3.0</td>
-      <td>weighted</td>
-      <td>sham</td>
-      <td>847</td>
-      <td>45</td>
-      <td>none</td>
-      <td>4</td>
-      <td>4.27</td>
-      <td>NaN</td>
-      <td>sham flower not positioned very well (needle s...</td>
-      <td>NaN</td>
-      <td>NaN</td>
-      <td>/Users/callinswitzer/Dropbox/ExperSummer2016/B...</td>
-      <td>NaN</td>
-      <td>False</td>
-      <td>Bee4_28Sept2016_Hive3_W_S/2016_09_28__08_45_02...</td>
-    </tr>
   </tbody>
 </table>
 </div>
@@ -12334,11 +12478,137 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[12]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">hlf4</span> <span class="o">=</span> <span class="n">hlf3</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="p">[</span><span class="s2">&quot;BeeColorNum&quot;</span><span class="p">,</span> <span class="s2">&quot;IT&quot;</span> <span class="p">,</span><span class="s2">&quot;Hive&quot;</span><span class="p">,</span> <span class="s2">&quot;FlowerType1&quot;</span><span class="p">,</span> <span class="s2">&quot;FlowerType2&quot;</span><span class="p">,</span> <span class="s2">&quot;trainingFile_&quot;</span><span class="p">,</span> <span class="s2">&quot;dateFrozenOrMarked&quot;</span><span class="p">]]</span>
-<span class="n">hlf4</span><span class="o">.</span><span class="n">Hive</span> <span class="o">=</span> <span class="n">hlf4</span><span class="o">.</span><span class="n">Hive</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">trID</span> <span class="o">=</span> <span class="n">big_frame</span><span class="p">[</span><span class="s1">&#39;BeeNumCol&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">str</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+<span class="n">t2</span> <span class="o">=</span> <span class="p">[</span><span class="n">trID</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">trID</span><span class="p">))]</span>
+<span class="c1"># remove &quot;bee&quot;</span>
+<span class="n">t3</span> <span class="o">=</span> <span class="p">[</span><span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s1">&#39;bee&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">t2</span><span class="p">[</span><span class="n">ii</span><span class="p">])</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t2</span><span class="p">))]</span>
+<span class="n">t4</span> <span class="o">=</span> <span class="p">[</span><span class="n">t3</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t3</span><span class="p">))]</span>
+<span class="n">big_frame</span><span class="p">[</span><span class="s2">&quot;beeID&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">t4</span>
+<span class="n">big_frame</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 
 </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[12]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>index</th>
+      <th>freq</th>
+      <th>amp</th>
+      <th>datetime</th>
+      <th>rewNum</th>
+      <th>rewTF</th>
+      <th>lowRewAmp</th>
+      <th>highrewAmp</th>
+      <th>BeeNumCol</th>
+      <th>accFile</th>
+      <th>beeID</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>250</td>
+      <td>0.17945</td>
+      <td>2016_09_28__09_59_13_112</td>
+      <td>1</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_13_112_220_450_test.txt</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>300</td>
+      <td>0.56657</td>
+      <td>2016_09_28__09_59_14_520</td>
+      <td>2</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_14_520_220_450_test.txt</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3</td>
+      <td>400</td>
+      <td>0.68371</td>
+      <td>2016_09_28__09_59_15_030</td>
+      <td>3</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_030_220_450_test.txt</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>4</td>
+      <td>410</td>
+      <td>0.80118</td>
+      <td>2016_09_28__09_59_15_707</td>
+      <td>4</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_707_220_450_test.txt</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>5</td>
+      <td>370</td>
+      <td>0.52666</td>
+      <td>2016_09_28__09_59_16_277</td>
+      <td>5</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_16_277_220_450_test.txt</td>
+      <td>7</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
 </div>
 </div>
 
@@ -12348,7 +12618,9 @@ last run on 2017-12-07 21:29:32.201084
 <div class="prompt input_prompt">In&nbsp;[13]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">hlf4</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">t5</span> <span class="o">=</span> <span class="p">[</span><span class="n">t3</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;hive&quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t3</span><span class="p">))]</span>
+<span class="n">big_frame</span><span class="p">[</span><span class="s2">&quot;hive&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_numeric</span><span class="p">(</span><span class="n">t5</span><span class="p">)</span>
+<span class="n">big_frame</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </pre></div>
 
 </div>
@@ -12361,6 +12633,146 @@ last run on 2017-12-07 21:29:32.201084
 
 <div class="output_area">
 <div class="prompt output_prompt">Out[13]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>index</th>
+      <th>freq</th>
+      <th>amp</th>
+      <th>datetime</th>
+      <th>rewNum</th>
+      <th>rewTF</th>
+      <th>lowRewAmp</th>
+      <th>highrewAmp</th>
+      <th>BeeNumCol</th>
+      <th>accFile</th>
+      <th>beeID</th>
+      <th>hive</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>250</td>
+      <td>0.17945</td>
+      <td>2016_09_28__09_59_13_112</td>
+      <td>1</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_13_112_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>300</td>
+      <td>0.56657</td>
+      <td>2016_09_28__09_59_14_520</td>
+      <td>2</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_14_520_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3</td>
+      <td>400</td>
+      <td>0.68371</td>
+      <td>2016_09_28__09_59_15_030</td>
+      <td>3</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_030_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>4</td>
+      <td>410</td>
+      <td>0.80118</td>
+      <td>2016_09_28__09_59_15_707</td>
+      <td>4</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_707_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>5</td>
+      <td>370</td>
+      <td>0.52666</td>
+      <td>2016_09_28__09_59_16_277</td>
+      <td>5</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_16_277_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">mdta</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[14]:</div>
 
 
 <div class="output_html rendered_html output_subarea output_execute_result">
@@ -12455,10 +12867,337 @@ last run on 2017-12-07 21:29:32.201084
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="prompt input_prompt">In&nbsp;[15]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">hlf4</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s2">&quot;/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData/BeeMetaData/HeavyLight_BeeMetaData_cleaned.csv&quot;</span><span class="p">,</span> <span class="n">header</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">index</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># merge metadata</span>
+<span class="n">bf2</span> <span class="o">=</span> <span class="n">big_frame</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">mdta</span><span class="p">,</span> <span class="n">left_on</span> <span class="o">=</span><span class="p">[</span><span class="s1">&#39;BeeNumCol&#39;</span><span class="p">,</span> <span class="s1">&#39;hive&#39;</span><span class="p">,</span> <span class="s2">&quot;beeID&quot;</span><span class="p">],</span> <span class="n">right_on</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;trainingFile_&quot;</span><span class="p">,</span> <span class="s2">&quot;Hive&quot;</span><span class="p">,</span> <span class="s2">&quot;BeeColorNum&quot;</span><span class="p">],</span> <span class="n">how</span> <span class="o">=</span> <span class="s1">&#39;outer&#39;</span><span class="p">,</span> <span class="n">indicator</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span>
+<span class="n">bf2</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[15]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>index</th>
+      <th>freq</th>
+      <th>amp</th>
+      <th>datetime</th>
+      <th>rewNum</th>
+      <th>rewTF</th>
+      <th>lowRewAmp</th>
+      <th>highrewAmp</th>
+      <th>BeeNumCol</th>
+      <th>accFile</th>
+      <th>beeID</th>
+      <th>hive</th>
+      <th>BeeColorNum</th>
+      <th>IT</th>
+      <th>Hive</th>
+      <th>FlowerType1</th>
+      <th>FlowerType2</th>
+      <th>trainingFile_</th>
+      <th>dateFrozenOrMarked</th>
+      <th>_merge</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>250</td>
+      <td>0.17945</td>
+      <td>2016_09_28__09_59_13_112</td>
+      <td>1</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_13_112_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>300</td>
+      <td>0.56657</td>
+      <td>2016_09_28__09_59_14_520</td>
+      <td>2</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_14_520_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3</td>
+      <td>400</td>
+      <td>0.68371</td>
+      <td>2016_09_28__09_59_15_030</td>
+      <td>3</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_030_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>4</td>
+      <td>410</td>
+      <td>0.80118</td>
+      <td>2016_09_28__09_59_15_707</td>
+      <td>4</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_707_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>5</td>
+      <td>370</td>
+      <td>0.52666</td>
+      <td>2016_09_28__09_59_16_277</td>
+      <td>5</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_16_277_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[16]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">bf2</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">bf2</span><span class="o">.</span><span class="n">_merge</span> <span class="o">==</span> <span class="s2">&quot;right_only&quot;</span><span class="p">,</span> <span class="p">:]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[16]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>index</th>
+      <th>freq</th>
+      <th>amp</th>
+      <th>datetime</th>
+      <th>rewNum</th>
+      <th>rewTF</th>
+      <th>lowRewAmp</th>
+      <th>highrewAmp</th>
+      <th>BeeNumCol</th>
+      <th>accFile</th>
+      <th>beeID</th>
+      <th>hive</th>
+      <th>BeeColorNum</th>
+      <th>IT</th>
+      <th>Hive</th>
+      <th>FlowerType1</th>
+      <th>FlowerType2</th>
+      <th>trainingFile_</th>
+      <th>dateFrozenOrMarked</th>
+      <th>_merge</th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[17]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">Counter</span><span class="p">(</span><span class="n">bf2</span><span class="o">.</span><span class="n">_merge</span><span class="p">)</span> <span class="c1"># should be 2360 for both</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[17]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>Counter({&#39;both&#39;: 2360})</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[18]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">Counter</span><span class="p">(</span><span class="n">bf2</span><span class="o">.</span><span class="n">rewTF</span><span class="p">)</span> <span class="c1"># should all be rewards</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[18]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>Counter({&#39; T&#39;: 2360})</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[19]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1">#get treatment -- note that the treatment switched after 50 rewards every time</span>
+
+<span class="n">bf2</span><span class="p">[</span><span class="s2">&quot;treatment&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
 </pre></div>
 
 </div>
@@ -12468,7 +13207,361 @@ last run on 2017-12-07 21:29:32.201084
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[15]:</div>
+<div class="prompt input_prompt">In&nbsp;[20]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">bf2</span><span class="o">.</span><span class="n">BeeNumCol</span><span class="p">):</span>
+    <span class="n">t1</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">bf2</span><span class="o">.</span><span class="n">loc</span><span class="p">[(</span><span class="n">bf2</span><span class="o">.</span><span class="n">BeeNumCol</span> <span class="o">==</span> <span class="n">ii</span><span class="p">),</span> <span class="s2">&quot;FlowerType1&quot;</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">t2</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">bf2</span><span class="o">.</span><span class="n">loc</span><span class="p">[(</span><span class="n">bf2</span><span class="o">.</span><span class="n">BeeNumCol</span> <span class="o">==</span> <span class="n">ii</span><span class="p">),</span> <span class="s2">&quot;FlowerType2&quot;</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="n">bf2</span><span class="o">.</span><span class="n">loc</span><span class="p">[(</span><span class="n">bf2</span><span class="o">.</span><span class="n">BeeNumCol</span> <span class="o">==</span> <span class="n">ii</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">bf2</span><span class="o">.</span><span class="n">rewNum</span> <span class="o">&lt;=</span> <span class="mi">50</span><span class="p">),</span><span class="s2">&quot;treatment&quot;</span> <span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">t1</span><span class="p">)</span>
+    <span class="n">bf2</span><span class="o">.</span><span class="n">loc</span><span class="p">[(</span><span class="n">bf2</span><span class="o">.</span><span class="n">BeeNumCol</span> <span class="o">==</span> <span class="n">ii</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">bf2</span><span class="o">.</span><span class="n">rewNum</span> <span class="o">&gt;</span> <span class="mi">50</span><span class="p">),</span> <span class="s2">&quot;treatment&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">t2</span><span class="p">)</span>
+
+<span class="n">bf2</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[20]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>index</th>
+      <th>freq</th>
+      <th>amp</th>
+      <th>datetime</th>
+      <th>rewNum</th>
+      <th>rewTF</th>
+      <th>lowRewAmp</th>
+      <th>highrewAmp</th>
+      <th>BeeNumCol</th>
+      <th>accFile</th>
+      <th>...</th>
+      <th>hive</th>
+      <th>BeeColorNum</th>
+      <th>IT</th>
+      <th>Hive</th>
+      <th>FlowerType1</th>
+      <th>FlowerType2</th>
+      <th>trainingFile_</th>
+      <th>dateFrozenOrMarked</th>
+      <th>_merge</th>
+      <th>treatment</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>250</td>
+      <td>0.17945</td>
+      <td>2016_09_28__09_59_13_112</td>
+      <td>1</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_13_112_220_450_test.txt</td>
+      <td>...</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+      <td>sham</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>300</td>
+      <td>0.56657</td>
+      <td>2016_09_28__09_59_14_520</td>
+      <td>2</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_14_520_220_450_test.txt</td>
+      <td>...</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+      <td>sham</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3</td>
+      <td>400</td>
+      <td>0.68371</td>
+      <td>2016_09_28__09_59_15_030</td>
+      <td>3</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_030_220_450_test.txt</td>
+      <td>...</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+      <td>sham</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>4</td>
+      <td>410</td>
+      <td>0.80118</td>
+      <td>2016_09_28__09_59_15_707</td>
+      <td>4</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_15_707_220_450_test.txt</td>
+      <td>...</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+      <td>sham</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>5</td>
+      <td>370</td>
+      <td>0.52666</td>
+      <td>2016_09_28__09_59_16_277</td>
+      <td>5</td>
+      <td>T</td>
+      <td>0</td>
+      <td>5</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>2016_09_28__09_59_16_277_220_450_test.txt</td>
+      <td>...</td>
+      <td>3</td>
+      <td>7</td>
+      <td>3.98</td>
+      <td>3</td>
+      <td>sham</td>
+      <td>weighted</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>both</td>
+      <td>sham</td>
+    </tr>
+  </tbody>
+</table>
+<p>5 rows × 21 columns</p>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[21]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1">#drop unwanted columns</span>
+<span class="n">bf3</span> <span class="o">=</span> <span class="n">bf2</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s2">&quot;index&quot;</span><span class="p">,</span><span class="s2">&quot;_merge&quot;</span><span class="p">,</span> <span class="s2">&quot;FlowerType1&quot;</span><span class="p">,</span> <span class="s2">&quot;FlowerType2&quot;</span><span class="p">,</span> <span class="s2">&quot;lowRewAmp&quot;</span><span class="p">,</span> <span class="s2">&quot;highrewAmp&quot;</span><span class="p">,</span> <span class="s2">&quot;BeeColorNum&quot;</span><span class="p">,</span> <span class="s2">&quot;Hive&quot;</span><span class="p">,</span> <span class="s2">&quot;rewTF&quot;</span><span class="p">,</span> <span class="s2">&quot;BeeNumCol&quot;</span><span class="p">],</span> <span class="n">axis</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+<span class="n">bf3</span> <span class="o">=</span> <span class="n">bf3</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="nb">str</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;trainingFile_&quot;</span><span class="p">:</span> <span class="s2">&quot;accFileAndFolder&quot;</span><span class="p">})</span>
+
+<span class="n">bf3</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[21]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<style>
+    .dataframe thead tr:only-child th {
+        text-align: right;
+    }
+
+    .dataframe thead th {
+        text-align: left;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>freq</th>
+      <th>amp</th>
+      <th>datetime</th>
+      <th>rewNum</th>
+      <th>accFile</th>
+      <th>beeID</th>
+      <th>hive</th>
+      <th>IT</th>
+      <th>accFileAndFolder</th>
+      <th>dateFrozenOrMarked</th>
+      <th>treatment</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>250</td>
+      <td>0.17945</td>
+      <td>2016_09_28__09_59_13_112</td>
+      <td>1</td>
+      <td>2016_09_28__09_59_13_112_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>3.98</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>sham</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>300</td>
+      <td>0.56657</td>
+      <td>2016_09_28__09_59_14_520</td>
+      <td>2</td>
+      <td>2016_09_28__09_59_14_520_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>3.98</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>sham</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>400</td>
+      <td>0.68371</td>
+      <td>2016_09_28__09_59_15_030</td>
+      <td>3</td>
+      <td>2016_09_28__09_59_15_030_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>3.98</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>sham</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>410</td>
+      <td>0.80118</td>
+      <td>2016_09_28__09_59_15_707</td>
+      <td>4</td>
+      <td>2016_09_28__09_59_15_707_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>3.98</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>sham</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>370</td>
+      <td>0.52666</td>
+      <td>2016_09_28__09_59_16_277</td>
+      <td>5</td>
+      <td>2016_09_28__09_59_16_277_220_450_test.txt</td>
+      <td>7</td>
+      <td>3</td>
+      <td>3.98</td>
+      <td>Bee7_28Sept2016_Hive3_S_W/2016_09_28__09_58_58...</td>
+      <td>28-Sep-16</td>
+      <td>sham</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[22]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># save dataset for analysis</span>
+<span class="n">bf3</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span><span class="s1">&#39;/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData/02_HeavyLight_cleaned.csv&#39;</span><span class="p">,</span> <span class="n">header</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">index</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[23]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># print system info</span>
@@ -12510,7 +13603,7 @@ last run on 2017-12-07 21:29:32.201084
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[16]:</div>
+<div class="prompt input_prompt">In&nbsp;[24]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># show installed packages and versions</span>
@@ -12697,20 +13790,7 @@ zict==0.1.2
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># convert to html, so ppl don&#39;t have to run python to see code</span>
 <span class="n">os</span><span class="o">.</span><span class="n">chdir</span><span class="p">(</span><span class="n">baseDir</span><span class="p">)</span>
-<span class="o">!</span>jupyter nbconvert --to html 003_CleanHeavyLightMetaData
-</pre></div>
-
-</div>
-</div>
-</div>
-
-</div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[&nbsp;]:</div>
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span> 
+<span class="o">!</span>jupyter nbconvert --to html 004_CombineTrialsHeavyLightData
 </pre></div>
 
 </div>
