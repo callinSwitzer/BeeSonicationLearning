@@ -13,78 +13,79 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationLearningManuscript")
-setwd("/Users/cswitzer/Dropbox/SonicationLearningManuscript")
+knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationBehavior")
 ```
 
-# Install packages
-```{r, warning=FALSE, message = FALSE}
+```{r}
+#install packages
 ipak <- function(pkg){
      new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
      if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "scales", "multcomp", "plyr", "car", "lme4", "signal", "viridis", "survival", "GGally", "survminer", "knitr")
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects", "viridis", "GGally", "survminer")
 ipak(packages)
 
+# set ggplot theme
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
 
-# print session info and time the code was run last
-Sys.time()
-sessionInfo()
+# define data and figure directories
+dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+
+
+# print system info
+print(paste("last run ", Sys.time()))
+print(R.version)
 ```
 
 
 # Read in data
 ```{r}
-bees <- read.csv("freqLearn_Hive78_long.csv")
+bees <- read.csv(file.path(dataDir, "03_StartStop_cleaned.csv"))
 head(bees)
 
-# add metadata to dataframe
-splitMetadata <- strsplit(as.character(bees$BeeNumCol), split = "_" )
-metad1 <- data.frame(matrix(unlist(splitMetadata), nrow=length(splitMetadata), byrow=T),stringsAsFactors=FALSE)
+# calculate mean freq rewarded vs. unrewarded for each bee
+# to make sure it agrees with what is already in the dataframe
+tapply(bees$freq, INDEX = list(bees$beeID, bees$treatment_rewarded), mean)
 
-metad1[, c(1, 6)] <- NULL
+# number of bees -- should be 96
+length(unique(bees$BeeNumCol))
 
-colnames(metad1) <- c("beeNum", "year", "month", "day", "hive", "trt")
-
-bees2 <- cbind(bees, metad1)
-
-head(bees2)
-nrow(bees2)
-
-length(unique(bees2$BeeNumCol))
+# num observations -- should be 5851
+nrow(bees)
 
 ```
 
-## visualize data
+## Visualize data
 ```{r}
-theme_set(theme_bw())
-ggplot(bees2, aes(x = index, y = freq, color = trt)) +
-     geom_point(alpha = 0.1) + 
+ggplot(bees, aes(y = freq, x = treatment_rewarded)) +
+     geom_boxplot() +  
      stat_smooth(method = "loess", span = 0.75)
 
-bees2$treatment <- mapvalues(bees2$trt, from = c("RewFir", "RewSec"), to = c("Rewarded_1st_50_Buzzes", "Rewarded_2nd_50_Buzzes"))
+bees$trt2 <- mapvalues(bees$treatment, from = c("RewFir", "RewSec"), 
+                       to = c("Rewarded 1st 50 Buzzes", "Rewarded 2nd 50 Buzzes"))
 
-ggplot(bees2, aes(x = index, y = freq, color = rewTF)) +
+ggplot(bees, aes(x = rewNum, y = freq, color = treatment_rewarded)) +
      stat_smooth(method = "loess", span = 1) + 
      xlab("Buzz Number") + 
      ylab("Buzz Frequency(hz)") + 
-     facet_wrap(~treatment) + 
+     facet_wrap(~trt2) + 
      scale_color_viridis(name = "Rewarded Buzzes", 
                          discrete = TRUE, begin = 0.2, end = 0.6)
-ggsave("beeRewards.png", width = 8, height = 5)
+#ggsave("beeRewards.png", width = 8, height = 5)
 
 
 # make survival plot
-survBees <- t(sapply(unique(bees2$beeNum), function(x) {
-     tmp <- bees2[bees2$beeNum == x, ]
-     return(tmp[which.max(tmp$index), ])
+survBees <- t(sapply(unique(bees$beeID), function(x) {
+     tmp <- bees[bees$beeID == x, ]
+     return(tmp[which.max(tmp$rewNum), ])
 }))
 
 
 lastObs <- as.data.frame(survBees)
-lastObs$index <- as.numeric(lastObs$index)
+lastObs$index <- as.numeric(lastObs$rewNum)
 
 
 # 1 = censored, 2 = stopped buzzing for 5 min
@@ -113,7 +114,7 @@ gsv$plot + facet_wrap(~treatment) +
      xlab("Buzz Number") + 
      ylab("Proportion Sonicating") 
 
-ggsave("beeSonicationPercentage.png", width = 8, height = 5)
+#ggsave("beeSonicationPercentage.pdf", width = 8, height = 5)
 
 
 ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4")) + 
@@ -123,34 +124,6 @@ ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4")) +
 
 xtabs(~lastObs$treatment + as.character(lastObs$hive))
 
-
-
-ggplot(bees2, aes(x = as.factor(index), y = freq, fill = trt)) +
-     geom_boxplot(outlier.color = NA, position = position_dodge(width = 1))
-     
-library(gridExtra)
-MinMeanSEMMax <- function(x) {
-  v <- c(mean(x) - sd(x)/sqrt(length(x)), mean(x) - sd(x)/sqrt(length(x)), mean(x), mean(x) + sd(x)/sqrt(length(x)), mean(x) + sd(x)/sqrt(length(x)))
-  names(v) <- c("ymin", "lower", "middle", "upper", "ymax")
-  v
-}
-
-g2 <- ggplot(bees2, aes(x = as.factor(index), y = freq, fill = trt)) +
-  stat_summary(fun.data=MinMeanSEMMax, geom="boxplot", colour="red") + 
-     facet_wrap(~trt) 
-g2
-
-
-par(mfrow = c(1,2))
-plot(bees2$index[bees2$trt == "RewFir" ], bees2$freq[bees2$trt == "RewFir" ], 
-     pch = 20, col = rgb(0,0,0,0.1))
-smth = lowess(bees2$index[bees2$trt == "RewFir" ], bees2$freq[bees2$trt == "RewFir" ])
-lines(smth, col = 'red', lwd = 5)
-
-plot(bees2$index[bees2$trt == "RewSec" ], bees2$freq[bees2$trt == "RewSec" ], 
-     pch = 20, col = rgb(0,0,0,0.1))
-smth = lowess(bees2$index[bees2$trt == "RewSec" ], bees2$freq[bees2$trt == "RewSec" ])
-lines(smth, col = 'blue', lwd = 5)
 ```
 
 
