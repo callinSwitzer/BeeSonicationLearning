@@ -190,6 +190,9 @@ dev.off()
 
 ### LMER analysis
 
+#### refref: todo -- more model selection and diagnostics 
+ -- get p-vals, maybe?
+
 ```{r}
 
 mod1 <- lmer(freq ~ trt2 * treatment_rewarded + IT_mm + hive + (1|beeID), data = bees)
@@ -200,6 +203,13 @@ plot(mod1)
 # diagnostics -- use REML = TRUE
 m1 <- update(mod1, .~., REML =TRUE)
 summary(m1) # summary for paper
+
+# pval for paper
+m22 <- update(m1, .~. - trt2 : treatment_rewarded , REML = TRUE)
+anova(m1, m22) # p-val for interaction
+
+
+
 plot(m1)
 qqnorm(ranef(m1)$beeID[[1]])
 qqline(ranef(m1)$beeID[[1]])
