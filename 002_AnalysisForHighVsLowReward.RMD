@@ -400,7 +400,7 @@ ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
            legend.position = 'none') +
      theme_classic() + 
-  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 56, label=c("a", "b", "c"),
+  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58, label=c("a", "b", "c"),
                 color="black") 
 ga0
 ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_unadjusted.pdf"), width = 5, height = 4)
@@ -415,7 +415,7 @@ ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
            legend.position = 'none') +
      theme_classic() + 
-  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 56, label=c("a", "b", "a"),
+  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58, label=c("a", "b", "a"),
                 color="black") 
 ga0
 ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_BonfAdjusted.pdf"), width = 5, height = 4)
