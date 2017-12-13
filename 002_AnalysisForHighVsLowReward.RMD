@@ -265,21 +265,27 @@ g0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
      geom_point()+ 
      labs(y = "Sonication frequency (Hz)", x = "Frequency range for reward") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
+  theme(plot.background = element_rect(fill = "transparent",colour = NA), 
+        panel.background = element_rect(fill = "transparent",colour = NA)) + 
   annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 360, label=c("a", "b", "c"),
                 color="black") 
 g0
 ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_unadjusted.pdf"), width = 5, height = 4)
+ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_unadjusted.png"), width = 5, height = 4)
 
-
-
+# save with transparent background
 g0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
      geom_point()+ 
      labs(y = "Sonication frequency (Hz)", x = "Frequency range for reward") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
+  theme(plot.background = element_rect(fill = "transparent",colour = NA), 
+        panel.background = element_rect(fill = "transparent",colour = NA)) + 
   annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 360, label=c("a", "b", "b"),
                 color="black") 
 g0
+
 ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_adjustedPvals.pdf"), width = 5, height = 4)
+ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_adjustedPvals.png"), width = 5, height = 4)
 
 
 
