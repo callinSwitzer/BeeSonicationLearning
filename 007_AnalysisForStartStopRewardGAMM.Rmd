@@ -240,9 +240,14 @@ pframe$bhi<- exp(bb2_se[2,])
 pframe$predMean <- pp
 pframe
 
+pframe$treatment_rewarded2 <- mapvalues(pframe$treatment_rewarded, from = c(" F", " T"), 
+                                        to = c("No", "Yes"))
+
+pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Yes")
+
 # Holding IT = meanIT
 print(ITmean)
-ga0 <- ggplot(pframe, aes(x=treatment_rewarded, y=predMean))+
+ga0 <- ggplot(pframe, aes(x=treatment_rewarded2, y=predMean))+
      geom_point()+ 
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Rewarded") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) +
@@ -253,10 +258,7 @@ ggsave(plot = ga0, filename = file.path(figDir, "StartStopBootAmp.pdf"), width =
 
 
 
-pframe$treatment_rewarded2 <- mapvalues(pframe$treatment_rewarded, from = c(" F", " T"), 
-                                        to = c("No", "Yes"))
 
-pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Yes")
 
 g03 <- ggplot(pframe, aes(x=visitNum_centered, y = predMean))   + 
   geom_line(aes(color = treatment_rewarded2)) + 
