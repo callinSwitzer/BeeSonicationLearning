@@ -376,13 +376,29 @@ ggsave(filename = file.path(figDir, "WeightedSham_Freq_Timeseries_RawData_trimme
 g0 <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
      labs(y = "Frequency (Hz)", x = "Flower treatment") + 
-     geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 0.5, width = 0.1) + 
+     geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0, end = 0, option = "A") + 
+  theme(legend.position = "none", 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") 
+g0
+ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers_BW.pdf"), width =2.5, height = 3)
+
+
+
+g0 <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
+    geom_point(aes(color = treatment), alpha = 1) + 
+     labs(y = "Frequency (Hz)", x = "Flower treatment") + 
+     geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
   theme(legend.position = "none", 
         legend.background = element_rect(fill=alpha('gray95', 1)), 
         legend.direction="horizontal") 
 g0
 ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers.pdf"), width =5, height = 3.6)
+
+
+
 
 ## add raw data
 g1 <- g0 + geom_point(data = newdf3, aes(x = treatment, y = freq, color = treatment), position = position_jitter(width = 0.1, height = 6), alpha = 0.4, pch = 16, size = 0.2)
@@ -629,6 +645,8 @@ ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_trtFacet.pdf"), wid
 # I like this plot
 
 
+## refref -- make  supplemental plots to show affect of IT span on amplitude and frequency
+
 ```
 
 
@@ -643,12 +661,30 @@ g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=treatment, y=
     geom_point(aes(color = treatment), alpha = 1) + 
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
      geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, option = "A", begin =0, end = 0) + 
+  theme(legend.position = "none", 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") 
+g0
+ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers_BW.pdf"), width =2.5, height = 3)
+
+
+
+g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=treatment, y=predMean))+
+    geom_point(aes(color = treatment), alpha = 1) + 
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
+     geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
   theme(legend.position = "none", 
         legend.background = element_rect(fill=alpha('gray95', 1)), 
         legend.direction="horizontal") 
 g0
 ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers.pdf"), width =5, height = 3.6)
+
+g22 <- g0 + 
+  annotate(geom="text", x=c(1,2), y=c(0, 0) + 40, label=c("a", "b"),
+                color="black")
+ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers_annot.pdf"), width =5, height = 3.6)
 
 ## add raw data
 g1 <- g0 + geom_point(data = newdf3, aes(x = treatment, y = amp_acc, color = treatment), position = position_jitter(width = 0.1, height = 6), alpha = 0.4, pch = 16, size = 0.2)

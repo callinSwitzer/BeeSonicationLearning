@@ -30,7 +30,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects")
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects", "viridis")
 ipak(packages)
 
 # set ggplot theme
@@ -52,6 +52,49 @@ sl <- read.csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
 
 # make sure hive is a factor
 sl$hive = as.factor(sl$hive)
+unique(sl$hive)
+
+# number of trials per bee
+xtabs(~sl$beeCol)
+hist(xtabs(~sl$beeCol))
+max(xtabs(~sl$beeCol))
+mean(xtabs(~sl$beeCol))
+sd(xtabs(~sl$beeCol))
+
+
+# number of visits for first trial
+xtabs(~sl$beeCol[sl$trialNum == 1])
+hist(xtabs(~sl$beeCol[sl$trialNum == 1]))
+mean(xtabs(~sl$beeCol[sl$trialNum == 1]))
+sd(xtabs(~sl$beeCol[sl$trialNum == 1]))
+
+
+
+# number of visits for second trial
+xtabs(~sl$beeCol[sl$trialNum == 2])
+
+
+# number of trials per bee and treatment
+xtabs(~sl$beeCol +  sl$trt)
+
+# number of trials per bee and treatment
+xtabs(~sl$beeCol +  sl$trialNum)
+
+# tabulate num bees in each trt
+tdf <- data.frame(xtabs(~sl$beeCol +  sl$trt))
+tdf2 <- acast(tdf, sl.beeCol~sl.trt, value.var="Freq")
+tdf3 <- as.data.frame(tdf2 > 0)
+
+trtdf<-table(interaction(tdf3$full, tdf3$high, tdf3$low))
+names(trtdf) <- c("FULL ONLY", "FULL-HIGH", "FULL-LOW", "NA")
+trtdf
+
+# get number of buzzes in each treatment
+colSums(tdf2)
+
+# get the number of bees for each treatment (every bee has "full" treatment)
+apply(tdf2, MARGIN = 2, function(x) length(x[x>0]))
+
 
 head(sl)
 dim(sl) # should be 24303 rows
@@ -85,6 +128,32 @@ tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, FUN = function(x)
 
 # total number of trials that were unrewarded per treatment
 tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, FUN = function(x) sum(!x))
+
+
+# calculate mean freq per bee per trial
+d1 <- as.data.frame((tapply(sl$freq, INDEX = list(sl$beeCol, sl$trt), mean)))
+d2 <- as.data.frame((tapply(sl$freq, INDEX = list(sl$beeCol, sl$trt), length)))
+d3 <- data.frame(d1, d2)
+d3$beeCol = row.names(d3)
+
+
+d4 <- melt(d3, id.vars=c("beeCol"), measure.vars=c("full", "full_2", "high", "low" ), value.name = "buzzFreq")
+d5 <- melt(d3, id.vars=c("beeCol"), measure.vars=c("full.1", "full_2.1", "high.1", "low.1" ), value.name = "NumBuzzes")
+
+
+d6 <- data.frame(d4, d5)
+d7 <- d6[!is.na(d6$buzzFreq),]
+d7
+
+# this plot shows how individual bees changed
+ggplot(d7, aes(x = variable, y = buzzFreq)) + 
+  geom_boxplot(aes(fill = variable == "full"), alpha = 0.2) + 
+  geom_point(aes(color = variable == "full", size = NumBuzzes)) + 
+  geom_line(aes(group = beeCol), alpha = 0.2) + 
+  scale_fill_viridis(name = "hihi", guide = FALSE, discrete = TRUE, option = "A", end = 0.6) + 
+  scale_color_viridis(name = "hihi", guide = FALSE, discrete = TRUE, option = "A", end = 0.6) + 
+  labs(x = "treatment")
+
 ```
 
 ### Visualizations and modeling
@@ -113,10 +182,9 @@ agg_sm
 
 agg_sm[duplicated(data.frame(agg_sm$colNum, agg_sm$trialNum)), ]
 
-ggplot(agg_sm, aes(x = trt, y = freq, fill = trialNum > 1)) +
-  geom_boxplot(alpha = 0.2) + 
-  geom_point(aes(color = trialNum>1)) + 
-  geom_line(aes(group = colNum))
+
+
+
 
 
 diffdf <- sapply(unique(agg_sm$colNum), FUN = function(x){
@@ -178,17 +246,20 @@ ggplot(droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]), aes(x = trtDF, y= as
   geom_point() + 
   labs(y = "diff in frequency -- averages")
 
+```
 
-m1 = lm(as.numeric(diffdf) ~ trtDF - 1, data = droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]))
-summary(m1)
+
+
+### MODELING
+
+
+```{r}
 
 sl$trt = relevel(factor(sl$trt), ref = "full")
 
 
 sl$trt2 = mapvalues(sl$trt, from = c("full", "full_2", "high", "low"), 
                     to = c("full", "full", "high", "low"))
-
-
 # summary for paper
 # fit a varying slope and intercept for colNum (bee ID), and allow the slope of the trialNum
 # variable to vary by colNum (beeID)
@@ -206,13 +277,15 @@ m2_1 = lmer(freq ~ trt2* IT_imputed + hive + trialNum  + (1+trialNum|colNum), da
 BIC(m2, m2_1) # m2 (no interaction) is better
 anova(m2, m2_1) # Note: this disagrees with BIC
 
+
+
 m3 = update(m2, .~. - hive)
 BIC(m2, m3) # m3 is better (without hive)
 anova(m2, m3) # Note: disagrees with BIC
 
 # refit best model with REML = TRUE
 m3 <- update(m3, .~., REML = TRUE)
-summary(m3) # summary for paper
+summary(m3) # summary for paper -- leave trial number in, to account for random effect
 plot(m3)
 qqnorm(ranef(m3)$colNum[[1]])
 qqline(ranef(m3)$colNum[[1]])
@@ -223,6 +296,9 @@ sjp.lmer(m3, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 
 # post-hoc tests -- pvals for paper
 summary(glht(m3, linfct = mcp(trt2 = "Tukey")), test = adjusted("none"))
+
+## bonf adjusted pvals
+summary(glht(m3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
 ```
 
 
@@ -233,6 +309,7 @@ summary(glht(m3, linfct = mcp(trt2 = "Tukey")), test = adjusted("none"))
 nbootSims = 1000
 
 ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
+print(ITmean)
 
 # don't need hive, because that's not in the model we chose (above)
 pframe <- data.frame(trt2 = levels(droplevels(sl$trt2)), IT_imputed = ITmean,  colNum = 99999, trialNum = 2)
@@ -270,7 +347,7 @@ g0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
   annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 360, label=c("a", "b", "c"),
                 color="black") 
 g0
-ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_unadjusted.pdf"), width = 5, height = 4)
+
 ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_unadjusted.png"), width = 5, height = 4)
 
 # save with transparent background
@@ -285,7 +362,7 @@ g0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
 g0
 
 ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_adjustedPvals.pdf"), width = 5, height = 4)
-ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_adjustedPvals.png"), width = 5, height = 4)
+
 
 
 

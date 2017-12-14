@@ -205,8 +205,8 @@ finmod <- g03
 ITmean = mean(tapply(bees$IT_mm, INDEX = bees$beeID, FUN = function(x) x[1] ))
 pframe = expand.grid(trt2 = levels(droplevels(bees$trt2)), 
                      visitNum_centered = -50:50, 
-                     IT_mm = ITmean,
-                     hive = factor(7, levels = levels(bees$hive)), 
+                     IT_mm = c(seq(min(bees$IT_mm), max(bees$IT_mm), length.out = 50), ITmean),
+                     hive = factor(c(7, 8), levels = levels(bees$hive)), 
                      beeID = 99999, 
                      treatment_rewarded = levels(bees$treatment_rewarded))
 
@@ -241,146 +241,48 @@ pframe$predMean <- pp
 pframe
 
 pframe$treatment_rewarded2 <- mapvalues(pframe$treatment_rewarded, from = c(" F", " T"), 
-                                        to = c("No", "Yes"))
+                                        to = c("No Reward", "Reward"))
 
-pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Yes")
+pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Reward")
 
 # Holding IT = meanIT
 print(ITmean)
-ga0 <- ggplot(pframe, aes(x=treatment_rewarded2, y=predMean))+
+ampPlot <- ggplot(pframe[(pframe$IT_mm == ITmean) & pframe$visitNum_centered == 1 & pframe$hive == 7, ], aes(x=treatment_rewarded2, y=predMean))+
      geom_point()+ 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Rewarded") + 
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Treatment") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) +
-  annotate(geom="text", x=c(1,2), y=c(0, 0) + 60, label=c("a", "b"),
+  annotate(geom="text", x=c(1,2), y=c(0, 0) + 57, label=c("a", "b"),
                 color="black") 
-ga0
-ggsave(plot = ga0, filename = file.path(figDir, "StartStopBootAmp.pdf"), width =4, height = 3)
+ampPlot
+ggsave(plot = ampPlot, filename = file.path(figDir, "StartStopBootAmp.pdf"), width =2.5, height = 3)
 
 
 
+# Holding IT = meanIT
+print(ITmean)
+ampPlot1 <- ggplot(pframe[(pframe$IT_mm == ITmean) & pframe$visitNum_centered == 1 & pframe$hive == 7, ], aes(x=treatment_rewarded2, y=predMean))+
+     geom_point()+ 
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) 
+ampPlot1
+ggsave(plot = ampPlot1, filename = file.path(figDir, "StartStopBootAmp_noAnnot.pdf"), width =2.5, height = 3)
 
+# show how IT affects amplitude
+summary(finmod)
 
-g03 <- ggplot(pframe, aes(x=visitNum_centered, y = predMean))   + 
-  geom_line(aes(color = treatment_rewarded2)) + 
-  # geom_line(aes(y=exp(fit-2*se), col=factor(group)), linetype="dashed") + 
-  # geom_line(aes(y=exp(fit+2*se), col=factor(group)), linetype="dashed") + 
-  geom_ribbon(aes(x=as.numeric(visitNum_centered), ymax=bhi, ymin=blo, fill = treatment_rewarded2), 
-              alpha=0.2) +
-  theme(legend.position = c(0.5, 0.85), 
-        legend.background = element_rect(fill=alpha('gray95', 1)), 
-        legend.direction="horizontal") + 
-  facet_wrap(~trt2) + 
-  labs(y = expression ("Sonication amplitude "(m~s^{-2})), 
-       x = "Sonication number\n (0 is when treatment switched)") +
-  scale_color_viridis(name = "Bee rewarded", discrete = TRUE, begin =0.3, end = 0.8) + 
-  scale_fill_viridis(name = "Bee rewarded", discrete = TRUE, begin =0.3, end = 0.8)  + 
-  ylim(c(42, 57))
-  # geom_segment(aes(y = 40, yend = 55, x = 0, xend = 0), inherit.aes = FALSE, lty = 2, alpha = 0.2, lwd = 0.2)
-  # geom_vline(aes(xintercept = 50, ymin = 40, ymax = 55), lty = 2, alpha = 0.2)
-g03
-ggsave(filename = file.path(figDir, "LMER_amplitude_visitNum.pdf"), width =5, height = 3.6)
+print(ITmean)
+pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
 
-```
-
-
-
-```{r, eval = FALSE}
-
-
-# old code, from when I though gamm was the way
-
-plot.df = cbind(pframe, as.data.frame(predict( g03, pframe, se.fit = T)))
-pred.gamm.plot = plot.df
-pred.gamm.plot$group = pred.gamm.plot$trt2
-pred.gamm.plot$se = pred.gamm.plot$se.fit
-bees$prediction <- as.vector(predict.gam(g04$gam))
-
-pred.gamm.plot$rewarded = mapvalues(pred.gamm.plot$treatment_rewarded, from = c(" T", " F"), to = c("Yes", "No"))
-pred.gamm.plot$rewarded <- relevel(pred.gamm.plot$rewarded, ref = "Yes")
-
-g0 <- ggplot(pred.gamm.plot, aes(x=visitNum_centered, y = exp(as.numeric(fit))))   + 
-  geom_line(aes(color = rewarded)) + 
-  # geom_line(aes(y=exp(fit-2*se), col=factor(group)), linetype="dashed") + 
-  # geom_line(aes(y=exp(fit+2*se), col=factor(group)), linetype="dashed") + 
-  geom_ribbon(aes(x=as.numeric(visitNum_centered), ymax=exp(fit+2*se), ymin=exp(fit-2*se), fill = rewarded), 
-              alpha=0.2) +
-  theme(legend.position = c(0.754, 0.85), 
-        legend.background = element_rect(fill=alpha('gray95', 1)), 
-        legend.direction="horizontal") + 
-  facet_wrap(~group) + 
-  labs(y = expression ("Sonication amplitude "(m~s^{-2})), 
-       x = "Sonication number\n (0 is when treatment switched)") +
-  scale_color_viridis(name = "Bee rewarded", discrete = TRUE, begin =0.3, end = 0.8) + 
-  scale_fill_viridis(name = "Bee rewarded", discrete = TRUE, begin =0.3, end = 0.8) 
-  # geom_segment(aes(y = 40, yend = 55, x = 0, xend = 0), inherit.aes = FALSE, lty = 2, alpha = 0.2, lwd = 0.2)
-  # geom_vline(aes(xintercept = 50, ymin = 40, ymax = 55), lty = 2, alpha = 0.2)
-g0
-# ggsave(filename = file.path(figDir, "StartStopPreds_amp_gamm2.pdf"), width =5, height = 3.6)
-
-
-# add raw data to plot
-g1 <- g0 + geom_point(data = bees, aes(x = visitNum_centered, y = amp_acc), 
-                      size = 0.1, pch = 16, 
-                      alpha = 0.1, position = position_jitter(width = 0.6)) + 
-  ylim(c(0, 200)) + 
-  theme(legend.position = c(0.5, 0.89), 
-        legend.background = element_rect(fill=alpha('gray95', 1)), 
-        legend.direction="horizontal")
-g1
-
-# ggsave(filename = file.path(figDir, "StartStopPreds_amp_gamm2_rawData.pdf"), width =5, height = 3.6)
-
-
-
-
-# add raw data to plot
-g2 <- g0 + geom_point(data = bees, aes(x = visitNum_centered, y = amp_acc), 
-                      size = 0.1, pch = 16, 
-                      alpha = 0.1, position = position_jitter(width = 0.6)) + 
-  ylim(c(0, 200)) + 
-  theme(legend.position = c(0.5, 0.89), 
-        legend.background = element_rect(fill=alpha('gray95', 1)), 
-        legend.direction="horizontal") + 
-  scale_y_log10(limits = c(2, 500)) + 
-  annotation_logticks(sides = "l", color = 'grey', size = 0.2) 
-g2
-
-# ggsave(filename = file.path(figDir, "StartStopPreds_amp_gamm2_rawData_logScale.pdf"), width =5, height = 3.6)
-
-
-
-# plot with different color scheme
-ggplot(pred.gamm.plot, aes(x=as.numeric(visitNum_centered), y = exp(as.numeric(fit))))   + 
-  geom_line(aes(color = group)) + 
-  # geom_line(aes(y=exp(fit-2*se), col=factor(group)), linetype="dashed") + 
-  # geom_line(aes(y=exp(fit+2*se), col=factor(group)), linetype="dashed") + 
-  geom_ribbon(aes(x=as.numeric(visitNum_centered), ymax=exp(fit+2*se), ymin=exp(fit-2*se), fill = group), 
-              alpha=0.2) +
-  theme(legend.position = "none") + 
-  facet_wrap(~group) + 
-  labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Visit Number") +
-  scale_color_viridis(discrete = TRUE, begin =0.3, end = 0.8) + 
-  scale_fill_viridis(discrete = TRUE, begin =0.3, end = 0.8)+ 
-  geom_vline(aes(xintercept = 50), lty = 2, alpha = 0.2)
-
-
-# plot raw data with estimated smooths (from gam)
-
-# plot raw data with loess
-ggplot(bees[bees$totalBuzzesNotRewarded > 30 & bees$totalRewards > 30, ], 
-       aes(x=as.numeric(visitNum), y = amp_acc))   + 
-  geom_point(alpha = 0.1, size = 0.1) + 
-   # geom_line(aes(colour = as.factor(beeID)), alpha = 0.2) +
-  # geom_line(stat = "smooth", method = "lm", aes(colour = as.factor(beeID)), alpha = 0.2) +
-  geom_smooth(aes(group = trt2), method = 'auto') +
-  theme(legend.position = "none") + 
-  facet_wrap(~trt2) + 
-  labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Visit Number") +
-  scale_color_viridis(discrete = TRUE) + 
-  scale_fill_viridis(discrete = TRUE, end = 0.8)+ 
-  geom_vline(aes(xintercept = 50), lty = 2, alpha = 0.2)
+ampPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
+     geom_line()+ 
+  facet_grid( Hive~treatment_rewarded2 , labeller = labeller(treatment_rewarded2= label_value, Hive = label_both)) +
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi), alpha = 0.2)
+ampPlotIT
+ggsave(plot = ampPlotIT, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP.pdf"), width =4, height = 3)
 
 ```
+
 
 
 
@@ -409,12 +311,14 @@ g04 <- gamm4(freq ~ IT_mm*treatment_rewarded + hive , random =  ~(1|beeID), data
 anova(g03$mer, g04$mer) # g04
 summary(g04$mer)
 
+
+g05 <- gamm4(freq ~ IT_mm+treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
+anova(g04$mer, g05$mer) # stay with g04
+
+
 finmod <- lmer(freq ~ IT_mm*treatment_rewarded + hive + (1|beeID), data = bees)
 summary(finmod)
 
-## refref here: whittle down GAMM like amplitude above
-
-finmod <- g03
 plot(finmod)
 
 ## refref diagnostics for this model
@@ -428,8 +332,8 @@ plot(finmod)
 ITmean = mean(tapply(bees$IT_mm, INDEX = bees$beeID, FUN = function(x) x[1] ))
 pframe = expand.grid(trt2 = levels(droplevels(bees$trt2)), 
                      visitNum_centered = -50:50, 
-                     IT_mm = ITmean,
-                     hive = factor(7, levels = levels(bees$hive)), 
+                     IT_mm = c(seq(min(bees$IT_mm), max(bees$IT_mm), length.out = 50), ITmean),
+                     hive = factor(c(7, 8), levels = levels(bees$hive)), 
                      beeID = 99999, 
                      treatment_rewarded = levels(bees$treatment_rewarded))
 
@@ -453,7 +357,7 @@ pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
 
 pp <- predict(finmod, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
 
-nbootSims2 = 10
+nbootSims2 = 1000
 ### Calculate CI's (using bootstrap, not accounting for random effects)
 bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
 print(paste("Number of bootstrap samples", nrow(bb2$t)))
@@ -463,40 +367,84 @@ pframe$bhi<- (bb2_se[2,])
 pframe$predMean <- pp
 pframe
 
-# Holding IT = meanIT
-print(ITmean)
-ga0 <- ggplot(pframe, aes(x=treatment_rewarded, y=predMean))+
-     geom_point()+ 
-     labs(y = "Sonication Frequency (Hz)", x = "Rewarded") + 
-     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)
-ga0
-ggsave(plot = ga0, filename = file.path(figDir, "StartStop_Freq.pdf"), width =4, height = 3)
-
-
 
 pframe$treatment_rewarded2 <- mapvalues(pframe$treatment_rewarded, from = c(" F", " T"), 
-                                        to = c("No", "Yes"))
+                                        to = c("No Reward", "Reward"))
 
-pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Yes")
+pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Reward")
 
-g03 <- ggplot(pframe, aes(x=visitNum_centered, y = predMean))   + 
-  geom_line(aes(color = treatment_rewarded2)) + 
-  # geom_line(aes(y=exp(fit-2*se), col=factor(group)), linetype="dashed") + 
-  # geom_line(aes(y=exp(fit+2*se), col=factor(group)), linetype="dashed") + 
-  geom_ribbon(aes(x=as.numeric(visitNum_centered), ymax=bhi, ymin=blo, fill = treatment_rewarded2), 
-              alpha=0.2) +
-  theme(legend.position = c(0.5, 0.85), 
-        legend.background = element_rect(fill=alpha('gray95', 1)), 
-        legend.direction="horizontal") + 
-  facet_wrap(~trt2) + 
-  labs(y = "Sonication Frequency (Hz)", 
-       x = "Sonication number\n (0 is when treatment switched)") +
-  scale_color_viridis(name = "Bee rewarded", discrete = TRUE, begin =0.3, end = 0.8) + 
-  scale_fill_viridis(name = "Bee rewarded", discrete = TRUE, begin =0.3, end = 0.8)
-  # geom_segment(aes(y = 40, yend = 55, x = 0, xend = 0), inherit.aes = FALSE, lty = 2, alpha = 0.2, lwd = 0.2)
-  # geom_vline(aes(xintercept = 50, ymin = 40, ymax = 55), lty = 2, alpha = 0.2)
-g03
-# ggsave(filename = file.path(figDir, "LMER_amplitude_visitNum.pdf"), width =5, height = 3.6)
+# Holding IT = meanIT
+print(ITmean)
+freqPlot <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm == ITmean & !(duplicated(pframe[, c("blo", "bhi", "predMean")])), ], aes(x=treatment_rewarded2, y=predMean))+
+     geom_point()+ 
+     labs(y = "Sonication Frequency (Hz)", x = "Treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) + 
+  annotate(geom="text", x=c(1,2), y=c(0, 0) + 345, label=c("a", "b"),
+                color="black")
+freqPlot
+ggsave(plot = freqPlot, filename = file.path(figDir, "StartStop_Freq.pdf"), width =2.5, height = 3)
+
+
+
+freqPlot <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm == ITmean & !(duplicated(pframe[, c("blo", "bhi", "predMean")])), ], aes(x=treatment_rewarded2, y=predMean))+
+     geom_point()+ 
+     labs(y = "Sonication Frequency (Hz)", x = "Treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)
+freqPlot
+ggsave(plot = freqPlot, filename = file.path(figDir, "StartStop_Freq_noAnnot.pdf"), width =2.5, height = 3)
+
+
+ITmean
+
+
+pframe["IT Span"] <- round(pframe$IT_mm, digits = 2)
+pframe$IT_mm <- round(pframe$IT_mm, digits = 2)
+unique(pframe$IT_mm)[seq(1, length(unique(pframe$IT_mm)), length.out = 6)]
+
+freqPlotIT <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm %in% unique(pframe$IT_mm)[seq(1, length(unique(pframe$IT_mm)), length.out = 6)] & !(duplicated(pframe[, c("blo", "bhi", "predMean")])), ], aes(x=treatment_rewarded2, y=predMean))+
+     geom_point()+ 
+     labs(y = "Sonication Frequency (Hz)", x = "Treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) + 
+  facet_wrap(~`IT Span`, labeller = label_both)
+freqPlotIT
+ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStop_Freq_noAnnot_IT.pdf"), width =2.5, height = 3)
+
+
+# make centered model, to make it a bit more interpretable
+# for IT span
+finmod_centered <- update(finmod, .~. - IT_mm*treatment_rewarded  + I(IT_mm - ITmean)*treatment_rewarded)
+summary(finmod_centered)
+summary(finmod)
+
+
+pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
+freqPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
+     geom_line(aes(color = treatment_rewarded2))+ 
+  facet_grid(~Hive , labeller = labeller(treatment_rewarded2= label_value, Hive = label_both)) +
+     labs(y = "Sonication Frequency (Hz)", x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi, fill = treatment_rewarded2), alpha = 0.2) + 
+  scale_color_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = c(0.25, 0.8), 
+        legend.background = element_rect(fill=alpha('gray95', 1)))
+  
+freqPlotIT
+ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStopBootFreq_ITHivePlot_SUPP2.pdf"), width =5, height = 3.7)
+
+
+# make plot for one hive only
+freqPlotIT_oneHIve <- ggplot(pframe[pframe$hive == 7, ], aes(x=IT_mm, y=predMean))+
+     geom_line(aes(color = treatment_rewarded2))+
+     labs(y = "Sonication Frequency (Hz)", x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi, fill = treatment_rewarded2), alpha = 0.2) + 
+  scale_color_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = c(0.75, 0.8), 
+        legend.background = element_rect(fill=alpha('gray95', 1)))
+  
+freqPlotIT_oneHIve
+ggsave(plot = freqPlotIT_oneHIve, filename = file.path(figDir, "StartStopBootFreq_ITOneHivePlot_SUPP2.pdf"), width =5, height = 3.7)
+
 
 ```
 
