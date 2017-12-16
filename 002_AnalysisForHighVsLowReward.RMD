@@ -390,6 +390,10 @@ g1
 
 ```
 
+### ____ END OF ANALYSIS FOR PAPER ____ ### 
+
+
+
 ### Analysis for amplitude
 
 ```{r ampAnalysis}

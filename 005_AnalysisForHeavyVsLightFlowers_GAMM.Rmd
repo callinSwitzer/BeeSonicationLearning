@@ -30,7 +30,8 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects", "gamm4", "viridis")
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects", "gamm4", "viridis", 
+              "cowplot")
 ipak(packages)
 
 # set ggplot theme
@@ -224,46 +225,71 @@ anova(g06$mer, g07$mer) # g07 better
 ```{r modeling1}
 # fit lmer that is similar to gamm above
 # interaction that may be important, based on domain knowledge
-m0 = lmer(freq ~ I(scale(visitNum_centered)) * trt2 + IT + hive  + I(scale(visitNum_centered^2)) + treatment + (1|beeID), data = newdf3, REML = FALSE)
+m0 = lmer(freq ~ I(scale(visitNum_centered)) * trt2 + I(scale(IT)) * treatment + hive  + I(scale(visitNum_centered^2)) + I(scale(IT)^2) +   (1|beeID), data = newdf3, REML = FALSE)
 
 summary(m0)
 
+
+
+
+
+
 # no interaction
-m1 = update(m0, .~. - IT)
+m1 = update(m0, .~. - I(scale(visitNum_centered^2)))
 BIC(m0, m1) # stay with m1 -- no interaction
 anova(m0, m1) # agrees with BIC
 
 summary(m1)
 
-m1.1 <- update(m1, .~. - I(scale(visitNum_centered^2)))
+m1.1 <- update(m1, .~. - I(scale(visitNum_centered)):trt2)
 anova(m1.1, m1) # keep 1.1
 summary(m1.1)
 
-m2 <- update(m1.1, .~. - I(scale(visitNum_centered)):trt2)
+m2 <- update(m1.1, .~. - hive)
 anova(m1.1, m2) # keep m2 (based on BIC)
 
 summary(m2)
 
-m3 <- update(m2, .~. - hive)
+m3 <- update(m2, .~. - I(scale(IT)^2))
 anova(m2, m3) # keep m3
 
 summary(m3)
 
-m3.1 <- update(m3, .~. - treatment)
+m3.1 <- update(m3, .~. - trt2)
 anova(m3, m3.1) # keep m3.1
 summary(m3.1)
 
-m4 <- update(m3.1, .~. - trt2)
-summary(m4)
+m4 <- update(m3.1, .~. - treatment)
+
 anova(m3.1, m4) #keep m4
+summary(m4)
 
 
-m5 <- update(m4, .~. -I(scale(visitNum_centered)))
+m5 <- update(m4, .~. -I(scale(IT)):treatment)
 anova(m4, m5) # keep m5 -- baesd on BIC (agrees with GAMM analysis above)
+
+summary(m5)
+
+
+m6 <- update(m5, .~. - I(scale(IT)))
+anova(m5, m6)
+
+summary(m6) 
+
+m7 <- update(m6, .~. - I(scale(visitNum_centered)))
+anova(m6, m7) # keep m7
+
+summary(m7)
+
+# get p-value for treament  for paper
+
+m_trt <- update(m7, .~. + treatment)
+anova(m7, m_trt) # p-val for paper
+
 
 
 # final freq mod for paper
-finmod <- update(m5, .~., REML = TRUE)
+finmod <- update(m7, .~., REML = TRUE)
 summary(finmod) # final model for paper -- same as gamm
 
 
@@ -275,6 +301,8 @@ qqline(ranef(finmod)$beeID[[1]])
 sjp.lmer(finmod, type = "re", sort = TRUE) # plot random effects to find any outliers
 # sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 ```
+
+
 
 
 ### Bootstrap CI's for figure for paper
@@ -373,15 +401,15 @@ ggsave(filename = file.path(figDir, "WeightedSham_Freq_Timeseries_RawData_trimme
 
 # mean and 95% CI (without visit number)
 
-g0 <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
+g0_freq <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
-     labs(y = "Frequency (Hz)", x = "Flower treatment") + 
+     labs(y = "Sonication Frequency (Hz)", x = "Flower treatment") + 
      geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0, end = 0, option = "A") + 
   theme(legend.position = "none", 
         legend.background = element_rect(fill=alpha('gray95', 1)), 
         legend.direction="horizontal") 
-g0
+g0_freq
 ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers_BW.pdf"), width =2.5, height = 3)
 
 
@@ -533,6 +561,13 @@ anova(ma3.1, m3.2) # keep ma3.1 (according to BIC)
 finmod <- update(ma3.1, .~., REML = TRUE)
 summary(finmod)
 
+
+# get p-value for interaction for paper
+pvalMod <- update(ma3.1, .~.  - IT:treatment)
+anova(ma3.1, pvalMod)
+
+
+
 # diagnostics
 plot(finmod)
 qqnorm(ranef(finmod)$beeID[[1]])
@@ -553,7 +588,7 @@ nbootSims2 = 1000
 
 # using hive 3, since it's the one with the most data
 pframe <- expand.grid(trt2 = levels(droplevels(newdf3$trt2)),
-                     IT = ITmean,
+                     IT = c(ITmean, seq(min(newdf3$IT), max(newdf3$IT), length.out = 50)),
                      visitNum_centered = -50:50, 
                      hive = factor(3, levels = levels(newdf3$hive)),  
                      beeID = 99999, 
@@ -605,7 +640,7 @@ g0 <- ggplot(pframe2, aes(x=visitNum_centered, y=predMean))+
 g0
 
 ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_amp.pdf"), width =5, height = 3.6)
-# I like this plot
+
 
 
 g1 <- g0 + geom_point(data = newdf3[newdf3$visitNum_centered < 50,],
@@ -614,7 +649,7 @@ g1 <- g0 + geom_point(data = newdf3[newdf3$visitNum_centered < 50,],
 g1
 
 ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_withRawData.pdf"), width =5, height = 3.6)
-# I like this plot
+
 
 
 
@@ -645,8 +680,6 @@ ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_trtFacet.pdf"), wid
 # I like this plot
 
 
-## refref -- make  supplemental plots to show affect of IT span on amplitude and frequency
-
 ```
 
 
@@ -657,7 +690,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_trtFacet.pdf"), wid
 ```{r}
 # mean and 95% CI (without visit number)
 
-g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=treatment, y=predMean))+
+g0_amp <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1) & pframe2$IT == ITmean, ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
      geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
@@ -665,12 +698,12 @@ g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=treatment, y=
   theme(legend.position = "none", 
         legend.background = element_rect(fill=alpha('gray95', 1)), 
         legend.direction="horizontal") 
-g0
+g0_amp
 ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers_BW.pdf"), width =2.5, height = 3)
 
 
 
-g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=treatment, y=predMean))+
+g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1) & pframe2$IT == ITmean, ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
      geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
@@ -680,6 +713,36 @@ g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=treatment, y=
         legend.direction="horizontal") 
 g0
 ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers.pdf"), width =5, height = 3.6)
+
+
+
+
+
+
+# here
+## refref -- make  supplemental plots to show affect of IT span on amplitude and frequency
+
+g0IT <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=IT, y=predMean))+
+    geom_line(aes(color = treatment), alpha = 1) + 
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT, ymin = blo, ymax = bhi, fill = treatment), alpha = 0.2) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = "top", 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") 
+g0IT
+ggsave(g0IT, filename = file.path(figDir, "WeightedSham_Amp_IT_SUPP.pdf"), width =5, height = 3.6)
+
+# make plot with rug
+weight_rug <- g0IT + geom_rug(data = newdf3[!duplicated(newdf3$IT),], inherit.aes = FALSE, aes(x = IT))
+  
+weight_rug
+ggsave(weight_rug, filename = file.path(figDir, "WeightedSham_Amp_IT_SUPP_rug.pdf"), width =5, height = 3.6)
+
+
+
+ITmean
 
 g22 <- g0 + 
   annotate(geom="text", x=c(1,2), y=c(0, 0) + 40, label=c("a", "b"),
@@ -693,6 +756,46 @@ g1
 ggsave(filename = file.path(figDir, "WeightedSham_amp_pointWhiskers_rawData.pdf"), width =5, height = 3.6)
 
 ```
+
+
+### Put two plots into a single figure
+
+```{r}
+
+# refref: note I might want to align these two figure for paper (in one plot)
+# WeightedSham_Amp_pointWhiskers_BW.pdf
+# WeightedSham_Freq_pointWhiskers_BW.pdf
+
+pfreq <- g0_freq + labs(x = "", y = "Sonication frequency (Hz)")
+
+pamp <- g0_amp + labs(x = "")
+
+aa <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,1.05))
+
+ab <- add_sub(aa, "Flower Treatment", x = 0.53, y = 1, vjust = -0.2)
+ggdraw(ab)
+
+ac <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,1.05), labels = "AUTO")
+ad <- add_sub(ac, "Flower Treatment", x = 0.53, y = 1, vjust = -0.2)
+ggdraw(ad)
+
+
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab.pdf"), plot = aa, base_width = 5.4, base_height = 3)
+
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4.pdf"), plot = ab, base_width = 5.4, base_height = 3.4)
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot.pdf"), plot = ad, base_width = 5.4, base_height = 3.9)
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
 # major break -- below this line is the first method I used
