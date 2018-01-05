@@ -287,6 +287,9 @@ m_trt <- update(m7, .~. + treatment)
 anova(m7, m_trt) # p-val for paper
 
 
+m_IT <- update(m7, .~. + IT)
+anova(m7, m_IT) # p-val for IT span
+
 
 # final freq mod for paper
 finmod <- update(m7, .~., REML = TRUE)
