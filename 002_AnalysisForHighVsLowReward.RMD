@@ -258,8 +258,8 @@ ggplot(droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]), aes(x = trtDF, y= as
 sl$trt = relevel(factor(sl$trt), ref = "full")
 
 
-sl$trt2 = mapvalues(sl$trt, from = c("full", "high", "low"), 
-                    to = c("full", "high", "low"))
+sl$trt2 = mapvalues(sl$trt, from = c("full", "full_2", "high", "low"), 
+                    to = c("full", "full", "high", "low"))
 # summary for paper
 # fit a varying slope and intercept for colNum (bee ID), and allow the slope of the trialNum
 # variable to vary by colNum (beeID)
