@@ -277,6 +277,7 @@ pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
 
 pp <- exp(predict(finmod, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
 
+# refref change to 10K
 nbootSims2 = 1000
 ### Calculate CI's (using bootstrap, not accounting for random effects)
 bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
@@ -319,10 +320,11 @@ summary(finmod)
 
 print(ITmean)
 pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
+pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
 
 ampPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
      geom_line()+ 
-  facet_grid( Hive~treatment_rewarded2 , labeller = labeller(treatment_rewarded2= label_value, Hive = label_both)) +
+  facet_grid( Colony~treatment_rewarded2 , labeller = labeller(treatment_rewarded2= label_value, Colony = label_both)) +
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi), alpha = 0.2)
 ampPlotIT
@@ -333,7 +335,7 @@ ggsave(plot = ampPlotIT, filename = file.path(figDir, "StartStopBootAmp_ITHivePl
 
 ampPlotIT2 <- ggplot(pframe, aes(x=IT_mm, y=predMean, color = treatment_rewarded2, fill  = treatment_rewarded2))+
      geom_line()+ 
-  facet_grid( ~Hive , labeller = labeller(treatment_rewarded2= label_value, Hive = label_both)) +
+  facet_grid( ~Colony , labeller = labeller(treatment_rewarded2= label_value, Colony = label_both)) +
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi), color = NA, alpha = 0.2) + 
   scale_color_viridis(discrete = TRUE, name = "Treatment", begin =0.3, end = 0.8) + 
@@ -344,15 +346,19 @@ ampPlotIT2
 ggsave(plot = ampPlotIT2, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2.pdf"), width =4, height = 3)
 
 bees$Hive <- mapvalues(bees$hive, from = c(7, 8), to = c("A", "B"))
+bees$Colony <- mapvalues(bees$hive, from = c(7, 8), to = c("A", "B"))
 
 ampPlot_rug <- ampPlotIT2 + geom_rug(data = bees[!duplicated(bees$IT_mm),], inherit.aes = FALSE, aes(x = IT_mm)) + 
-  facet_wrap(~Hive, labeller = label_both) + 
+  facet_wrap(~Colony, labeller = label_both) + 
   theme(strip.background =element_rect(fill = "white", linetype = 1, size = 1, color = 'black')) + 
-    theme(legend.position = c(0.53, 0.81), 
+    theme(legend.position = c(0.75, 0.81), 
         legend.background = element_rect(fill=alpha('gray95', 1)))
 ampPlot_rug
 
 ggsave(plot = ampPlot_rug, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2_rug.pdf"), width =5, height = 3.5)
+
+
+Fig32 <- ampPlot_rug
 
 
 ```
@@ -446,7 +452,9 @@ pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
 
 pp <- predict(finmod, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
 
-nbootSims2 = 1000
+
+# refref: change to 10K
+nbootSims2 = 10000
 ### Calculate CI's (using bootstrap, not accounting for random effects)
 bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
 print(paste("Number of bootstrap samples", nrow(bb2$t)))
@@ -494,6 +502,9 @@ summary(finmod)
 
 
 pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
+pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
+
+
 freqPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
      geom_line(aes(color = treatment_rewarded2))+ 
   facet_grid(~Hive , labeller = labeller(treatment_rewarded2= label_value, Hive = label_both)) +
@@ -509,13 +520,14 @@ ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStopBootFreq_ITHive
 
 
 freqPlot_rug <- freqPlotIT + geom_rug(data = bees[!duplicated(bees$IT_mm),], inherit.aes = FALSE, aes(x = IT_mm)) + 
-  facet_wrap(~Hive, labeller = label_both) + 
+  facet_wrap(~Colony, labeller = label_both) + 
   theme(strip.background =element_rect(fill = "white", linetype = 1, size = 1, color = 'black')) + 
   theme(legend.position = c(0.17, 0.81), 
         legend.background = element_rect(fill=alpha('gray95', 1)))
 freqPlot_rug
 ggsave(plot = freqPlot_rug, filename = file.path(figDir, "StartStopBootFreq_ITHivePlot_SUPP2_rug.pdf"), width =5, height = 3.5)
 
+Fig31 <- freqPlot_rug
 
 # make plot for one hive only
 freqPlotIT_oneHIve <- ggplot(pframe[pframe$hive == 7, ], aes(x=IT_mm, y=predMean))+
@@ -538,6 +550,22 @@ ggsave(plot = freqPlotIT_oneHIve, filename = file.path(figDir, "StartStopBootFre
 ### Combine plots into a single figure
 
 ```{r}
+
+p1 <- Fig31 + xlab("") + theme(legend.position = "none", 
+                               strip.background = element_blank()) + labs(y = "Sonication frequency (Hz)") 
+p2 <- Fig32 + theme(strip.background = element_blank(),
+  strip.text.x = element_blank())
+
+
+aa <- plot_grid(p1, p2, align = 'v', axis = 'l', rel_widths = c(1,1), ncol = 1, nrow = 2)
+
+ggdraw(aa)
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_IT.pdf"), plot = aa, base_width = 5, base_height = 5)
+
+
+
+
+
 ###
 p1 <- freqPlot + labs(x = "")
 p2 <- ampPlot1 + labs(x ="") + scale_y_continuous(breaks=seq(45,55,5))

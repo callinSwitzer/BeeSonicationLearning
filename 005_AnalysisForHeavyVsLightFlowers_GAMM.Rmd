@@ -312,7 +312,7 @@ sjp.lmer(finmod, type = "re", sort = TRUE) # plot random effects to find any out
 
 ```{r bootstrap1, cache = TRUE}
 # set number of bootstrap replicates for models
-nbootSims = 1000
+nbootSims = 10000
 
 table(new_df$hive) # more trials from hive 3
 
@@ -370,7 +370,7 @@ pframe$trt3 <- mapvalues(pframe$trt2, from = c("Sham first", "Weighted first"),
 
 g0 <- ggplot(pframe, aes(x=visitNum_centered, y=predMean))+
      geom_line(aes(color = treatment))+ 
-     labs(y = "Frequency (Hz)", x = "Sonication number\n (0 is when treatment switched)") + 
+     labs(y = "Sonication frequency (Hz)", x = "Sonication number\n (0 is when treatment switched)") + 
      geom_ribbon(aes(x = visitNum_centered, ymin = blo, ymax = bhi, fill= treatment), alpha = 0.2) + 
   facet_wrap(~trt3) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
@@ -406,7 +406,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Freq_Timeseries_RawData_trimme
 
 g0_freq <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
-     labs(y = "Sonication Frequency (Hz)", x = "Flower treatment") + 
+     labs(y = "Sonication frequency (Hz)", x = "Flower treatment") + 
      geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0, end = 0, option = "A") + 
   theme(legend.position = "none", 
@@ -419,7 +419,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers_BW.pdf"), w
 
 g0 <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
-     labs(y = "Frequency (Hz)", x = "Flower treatment") + 
+     labs(y = "Sonication frequency (Hz)", x = "Flower treatment") + 
      geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
   theme(legend.position = "none", 
@@ -428,6 +428,8 @@ g0 <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment
 g0
 ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers.pdf"), width =5, height = 3.6)
 
+
+Fig2a <- g0
 
 
 
@@ -587,7 +589,7 @@ sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 ```{r bootstrap_amp2, cache = TRUE}
 
 # set number of bootstrap replicates for models
-nbootSims2 = 1000
+nbootSims2 = 10000
 
 # using hive 3, since it's the one with the most data
 pframe <- expand.grid(trt2 = levels(droplevels(newdf3$trt2)),
@@ -680,7 +682,6 @@ g03 <- ggplot(pframe2, aes(x=visitNum_centered, y=predMean))+
 g03
 
 ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_trtFacet.pdf"), width =5, height = 3.6)
-# I like this plot
 
 
 ```
@@ -722,8 +723,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers.pdf"), width
 
 
 
-# here
-## refref -- make  supplemental plots to show affect of IT span on amplitude and frequency
+# fig 2b
 
 g0IT <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=IT, y=predMean))+
     geom_line(aes(color = treatment), alpha = 1) + 
@@ -742,6 +742,8 @@ weight_rug <- g0IT + geom_rug(data = newdf3[!duplicated(newdf3$IT),], inherit.ae
   
 weight_rug
 ggsave(weight_rug, filename = file.path(figDir, "WeightedSham_Amp_IT_SUPP_rug.pdf"), width =5, height = 3.6)
+
+Fig2b <- weight_rug
 
 
 
@@ -763,32 +765,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_amp_pointWhiskers_rawData.pdf"
 
 ### Put two plots into a single figure
 
-```{r}
 
-# refref: note I might want to align these two figure for paper (in one plot)
-# WeightedSham_Amp_pointWhiskers_BW.pdf
-# WeightedSham_Freq_pointWhiskers_BW.pdf
-
-pfreq <- g0_freq + labs(x = "", y = "Sonication frequency (Hz)")
-
-pamp <- g0_amp + labs(x = "")
-
-aa <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,1.05))
-
-ab <- add_sub(aa, "Flower Treatment", x = 0.53, y = 1, vjust = -0.2)
-ggdraw(ab)
-
-ac <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,1.05), labels = "AUTO")
-ad <- add_sub(ac, "Flower Treatment", x = 0.53, y = 1, vjust = -0.2)
-ggdraw(ad)
-
-
-save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab.pdf"), plot = aa, base_width = 5.4, base_height = 3)
-
-save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4.pdf"), plot = ab, base_width = 5.4, base_height = 3.4)
-save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot.pdf"), plot = ad, base_width = 5.4, base_height = 3.9)
-
-```
 
 
 
@@ -969,6 +946,36 @@ ga0 <- ggplot(pframe, aes(x=treatment, y=predMean))+
                 color="black") 
 ga0
 ggsave(plot = ga0, filename = file.path(figDir, "HeavyLight_PredsAndCI_amp.pdf"), width =4, height = 3)
+```
+
+
+
+
+### Put two plots into a single figure
+
+```{r}
+
+# refref: note I might want to align these two figure for paper (in one plot)
+# WeightedSham_Amp_pointWhiskers_BW.pdf
+# WeightedSham_Freq_pointWhiskers_BW.pdf
+
+pfreq <- Fig2a
+
+pamp <- Fig2b + theme(legend.position = c(.5,.85)) + ylim(c(10,55))
+
+  
+
+aa <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2))
+
+ggdraw(aa)
+
+ac <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2), labels = "AUTO")
+ggdraw(ac)
+
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab_IT.pdf"), plot = aa, base_width = 7, base_height = 3)
+
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot_IT.pdf"), plot = ac, base_width = 7, base_height = 3)
+
 ```
 
 
