@@ -128,6 +128,10 @@ s2 <- coxph(survObj ~ Treatment, data = lastObs)
 s2
 anova(s1, s2)
 
+s3 <- coxph(survObj ~ Treatment + unlist(IT_mm), data = lastObs) 
+summary(s3) # IT not important in Cox model
+
+
 
 s3 <- coxph(survObj ~ I(lastObs$visitNum > 50), data = lastObs) 
 

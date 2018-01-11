@@ -566,6 +566,9 @@ anova(ma3.1, m3.2) # keep ma3.1 (according to BIC)
 finmod <- update(ma3.1, .~., REML = TRUE)
 summary(finmod)
 
+# finmod_centered <- update(ma3.1, .~. - IT*treatment + I(scale(IT, center = TRUE, scale = FALSE))*treatment, REML = TRUE)
+# summary(finmod_centered)
+
 
 # get p-value for interaction for paper
 pvalMod <- update(ma3.1, .~.  - IT:treatment)

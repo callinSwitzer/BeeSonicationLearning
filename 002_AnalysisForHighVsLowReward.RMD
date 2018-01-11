@@ -76,6 +76,17 @@ xtabs(~sl$beeCol[sl$trialNum == 2])
 
 # number of trials per bee and treatment
 xtabs(~sl$beeCol +  sl$trt)
+colSums(xtabs(~sl$beeCol +  sl$trt))
+# total num
+sum(colSums(xtabs(~sl$beeCol +  sl$trt)))
+
+xtabs(~sl$beeCol +  sl$IT_imputed)
+
+# hist(unique(sl$IT_imputed[sl$trt2 == "low"]))
+# rug(unique(sl$IT_imputed[sl$trt2 == "low"]))
+# 
+# hist(unique(sl$IT_imputed[sl$trt2 == "high"]))
+# rug(unique(sl$IT_imputed[sl$trt2 == "high"]))
 
 # number of trials per bee and treatment
 xtabs(~sl$beeCol +  sl$trialNum)
@@ -271,6 +282,28 @@ m2 = lmer(freq ~ trt2 + hive + trialNum + IT_imputed + (1+trialNum|colNum), data
 # the effect of trialNum within each level of colNum
 # the correlation between intercept of trialNum across levels of colNum
 
+
+vif.mer <- function (fit) {
+    ## adapted from rms::vif
+
+    v <- vcov(fit)
+    nam <- names(fixef(fit))
+
+    ## exclude intercepts
+    ns <- sum(1 * (nam == "Intercept" | nam == "(Intercept)"))
+    if (ns > 0) {
+        v <- v[-(1:ns), -(1:ns), drop = FALSE]
+        nam <- nam[-(1:ns)]
+    }
+
+    d <- diag(v)^0.5
+    v <- diag(solve(v/(d %o% d)))
+    names(v) <- nam
+    v
+}
+
+vif.mer(m2) # fine
+
 m2_1 = lmer(freq ~ trt2* IT_imputed + hive + trialNum  + (1+trialNum|colNum), data = sl, REML = FALSE)
 
 # compare models with BIC
@@ -440,6 +473,7 @@ summary(glht(maa3, linfct = mcp(trt2 = "Tukey")), test = adjusted("none"))
 
 # post-hoc tests with bonf adjustment
 summary(glht(maa3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
+
 ```
 
 
