@@ -123,6 +123,19 @@ lastObs$Treatment <- mapvalues(lastObs$treatment, from = c("RewFir", "RewSec"), 
 km.as.one <- survfit(survObj ~ 1, data = lastObs, conf.type = "log-log")
 km.by.trt <- survfit(survObj ~ Treatment, data = lastObs, conf.type = "log-log")
 
+s1 <- coxph(survObj ~ 1, data = lastObs) 
+s2 <- coxph(survObj ~ Treatment, data = lastObs) 
+s2
+anova(s1, s2)
+
+
+s3 <- coxph(survObj ~ I(lastObs$visitNum > 50), data = lastObs) 
+
+# test proportional hazard assumption
+testph <- cox.zph(s2) # no evidence that prop haz assumption is violated
+ggcoxzph(testph)
+
+
 par(mfrow = c(1,1))
 plot(km.by.trt)
 
