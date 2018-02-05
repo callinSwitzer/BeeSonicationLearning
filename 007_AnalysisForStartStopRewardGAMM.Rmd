@@ -336,8 +336,8 @@ ggsave(plot = ampPlot1, filename = file.path(figDir, "StartStopBootAmp_noAnnot.p
 summary(finmod)
 
 print(ITmean)
-pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
-pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
+pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
+pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
 
 ampPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
      geom_line()+ 
@@ -362,8 +362,8 @@ ampPlotIT2 <- ggplot(pframe, aes(x=IT_mm, y=predMean, color = treatment_rewarded
 ampPlotIT2
 ggsave(plot = ampPlotIT2, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2.pdf"), width =4, height = 3)
 
-bees$Hive <- mapvalues(bees$hive, from = c(7, 8), to = c("A", "B"))
-bees$Colony <- mapvalues(bees$hive, from = c(7, 8), to = c("A", "B"))
+bees$Hive <- mapvalues(bees$hive, from = c(7, 8), to = c("4", "5"))
+bees$Colony <- mapvalues(bees$hive, from = c(7, 8), to = c("4", "5"))
 
 ampPlot_rug <- ampPlotIT2 + geom_rug(data = bees[!duplicated(bees$IT_mm),], inherit.aes = FALSE, aes(x = IT_mm)) + 
   facet_wrap(~Colony, labeller = label_both) + 
@@ -518,8 +518,8 @@ ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStop_Freq_noAnnot_I
 summary(finmod)
 
 
-pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
-pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("A", "B"))
+pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
+pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
 
 
 freqPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
