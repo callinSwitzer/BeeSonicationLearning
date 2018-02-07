@@ -160,7 +160,7 @@ gsv$plot + facet_wrap(~Treatment) +
 ggsave(file.path(figDir, "beeSonicationPercentage.pdf"), width = 5, height = 3)
 
 
-ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4")) + 
+ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4"), plot.cens = FALSE) + 
      ylim(c(0, 1)) + 
      xlab("Sonication Number") + 
      ylab("Cumulative Proportion Sonicating") + 
@@ -339,6 +339,11 @@ print(ITmean)
 pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
 pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
 
+# cut predictions to within range of data
+pframe[pframe$Colony == "4" & pframe$`IT_mm`<3.5, ] = NA
+pframe = pframe[complete.cases(pframe), ]
+pframe = droplevels(pframe)
+
 ampPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
      geom_line()+ 
   facet_grid( Colony~treatment_rewarded2 , labeller = labeller(treatment_rewarded2= label_value, Colony = label_both)) +
@@ -352,7 +357,7 @@ ggsave(plot = ampPlotIT, filename = file.path(figDir, "StartStopBootAmp_ITHivePl
 
 ampPlotIT2 <- ggplot(pframe, aes(x=IT_mm, y=predMean, color = treatment_rewarded2, fill  = treatment_rewarded2))+
      geom_line()+ 
-  facet_grid( ~Colony , labeller = labeller(treatment_rewarded2= label_value, Colony = label_both)) +
+  facet_grid( ~Colony , labeller = labeller(treatment_rewarded2= label_value, Colony = label_both), scales = 'free') +
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi), color = NA, alpha = 0.2) + 
   scale_color_viridis(discrete = TRUE, name = "Treatment", begin =0.3, end = 0.8) + 
@@ -366,7 +371,7 @@ bees$Hive <- mapvalues(bees$hive, from = c(7, 8), to = c("4", "5"))
 bees$Colony <- mapvalues(bees$hive, from = c(7, 8), to = c("4", "5"))
 
 ampPlot_rug <- ampPlotIT2 + geom_rug(data = bees[!duplicated(bees$IT_mm),], inherit.aes = FALSE, aes(x = IT_mm)) + 
-  facet_wrap(~Colony, labeller = label_both) + 
+  facet_wrap(~Colony, labeller = label_both, scales = "free_x") + 
   theme(strip.background =element_rect(fill = "white", linetype = 1, size = 1, color = 'black')) + 
     theme(legend.position = c(0.75, 0.81), 
         legend.background = element_rect(fill=alpha('gray95', 1)))
@@ -465,6 +470,8 @@ pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
                     pframe$visitNum_centered > 0) 
                     , ]
 
+
+
 # predict make plots, using full model 
 
 pp <- predict(finmod, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
@@ -521,10 +528,18 @@ summary(finmod)
 pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
 pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
 
+# cut predictions to within range of data
+pframe[pframe$Colony == "4" & pframe$`IT Span`<3.5, ] = NA
+
+pframe = pframe[complete.cases(pframe), ]
+
+pframe = droplevels(pframe)
+
+summary(pframe)
 
 freqPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
      geom_line(aes(color = treatment_rewarded2))+ 
-  facet_grid(~Hive , labeller = labeller(treatment_rewarded2= label_value, Hive = label_both)) +
+  facet_grid(.~Colony, labeller= label_both, scales = "free_x") +
      labs(y = "Sonication Frequency (Hz)", x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi, fill = treatment_rewarded2), alpha = 0.2) + 
   scale_color_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
@@ -537,7 +552,7 @@ ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStopBootFreq_ITHive
 
 
 freqPlot_rug <- freqPlotIT + geom_rug(data = bees[!duplicated(bees$IT_mm),], inherit.aes = FALSE, aes(x = IT_mm)) + 
-  facet_wrap(~Colony, labeller = label_both) + 
+  facet_wrap(~Colony, labeller = label_both, scales = "free_x") + 
   theme(strip.background =element_rect(fill = "white", linetype = 1, size = 1, color = 'black')) + 
   theme(legend.position = c(0.17, 0.81), 
         legend.background = element_rect(fill=alpha('gray95', 1)))
@@ -569,7 +584,10 @@ ggsave(plot = freqPlotIT_oneHIve, filename = file.path(figDir, "StartStopBootFre
 ```{r}
 
 p1 <- Fig31 + xlab("") + theme(legend.position = "none", 
-                               strip.background = element_blank()) + labs(y = "Sonication frequency (Hz)") 
+                               strip.background = element_blank(), 
+                               axis.text.x=element_blank(), 
+                               axis.ticks.x=element_blank()) + 
+            labs(y = "Sonication frequency (Hz)") 
 p2 <- Fig32 + theme(strip.background = element_blank(),
   strip.text.x = element_blank())
 
@@ -577,6 +595,7 @@ p2 <- Fig32 + theme(strip.background = element_blank(),
 aa <- plot_grid(p1, p2, align = 'v', axis = 'l', rel_widths = c(1,1), ncol = 1, nrow = 2)
 
 ggdraw(aa)
+
 save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_IT.pdf"), plot = aa, base_width = 5, base_height = 5)
 
 
