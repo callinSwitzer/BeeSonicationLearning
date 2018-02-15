@@ -49,6 +49,9 @@ bees <- read.csv(file.path(dataDir, "03_StartStop_cleaned.csv"))
 bees$hive = as.factor(bees$hive)
 head(bees)
 
+bees$amp <- bees$amp /2
+bees$amp_acc <- bees$amp_acc/2
+
 # calculate mean freq rewarded vs. unrewarded for each bee
 # to make sure it agrees with what is already in the dataframe
 tapply(bees$freq, INDEX = list(bees$beeID, bees$treatment_rewarded), mean)

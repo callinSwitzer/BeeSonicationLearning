@@ -52,6 +52,11 @@ print(R.version)
 
 ```{r}
 new_df = read.csv(file.path(dataDir, "02_HeavyLight_cleaned.csv"))
+
+# divide amplitude by two
+new_df$amp = new_df$amp / 2
+new_df$amp_acc = new_df$amp_acc / 2
+
 new_df$hive = as.factor(new_df$hive)
 new_df$treatment <- mapvalues(new_df$treatment, from = c("sham", "weighted"), to = c("Sham", "Weighted"))
 head(new_df)
@@ -111,7 +116,7 @@ ampLong <- melt(ampMeans, id.vars = "beeID", measure.vars =  c("Sham", "Weighted
 ggplot(ampLong, aes(x = trt, y = amp)) + 
      geom_boxplot() + 
      geom_point()  + 
-  labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment")
+  labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment")
 
 ggplot(ampLong, aes(x = trt, y = amp)) + 
      geom_boxplot() + 
@@ -121,7 +126,7 @@ ggplot(ampLong, aes(x = trt, y = amp)) +
 
 ggplot(ampLong, aes(x = trt, y = amp)) + 
      geom_boxplot() + 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment")
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment")
 #ggsave(file.path(figDir, 'heavyLightAmp.pdf'), width = 5, heigh = 4)
 
 nrow(ampLong)
@@ -637,7 +642,7 @@ pframe2$trt3 <- mapvalues(pframe2$trt2, from = c("Sham first", "Weighted first")
 
 g0 <- ggplot(pframe2, aes(x=visitNum_centered, y=predMean))+
      geom_line(aes(color = treatment))+ 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Sonication number\n (0 is when treatment switched)") + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Sonication number\n (0 is when treatment switched)") + 
      geom_ribbon(aes(x = visitNum_centered, ymin = blo, ymax = bhi, fill= treatment), alpha = 0.2) + 
   facet_wrap(~trt3) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
@@ -673,7 +678,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_withRawData_logScal
 
 g03 <- ggplot(pframe2, aes(x=visitNum_centered, y=predMean))+
      geom_line(aes(color = treatment))+ 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Sonication number\n (0 is when treatment switched)") + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Sonication number\n (0 is when treatment switched)") + 
      geom_ribbon(aes(x = visitNum_centered, ymin = blo, ymax = bhi, fill= treatment), alpha = 0.2) + 
   facet_wrap(~treatment) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
@@ -699,7 +704,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_trtFacet.pdf"), wid
 
 g0_amp <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1) & pframe2$IT == ITmean, ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment") + 
      geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, option = "A", begin =0, end = 0) + 
   theme(legend.position = "none", 
@@ -712,7 +717,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers_BW.pdf"), wi
 
 g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1) & pframe2$IT == ITmean, ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment") + 
      geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
   theme(legend.position = "none", 
@@ -730,7 +735,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers.pdf"), width
 
 g0IT <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=IT, y=predMean))+
     geom_line(aes(color = treatment), alpha = 1) + 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT, ymin = blo, ymax = bhi, fill = treatment), alpha = 0.2) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
   scale_fill_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
@@ -943,7 +948,7 @@ pframe
 print(ITmean)
 ga0 <- ggplot(pframe, aes(x=treatment, y=predMean))+
      geom_point()+ 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) +
   annotate(geom="text", x=c(1,2), y=c(0, 0) + 40, label=c("a", "b"),
                 color="black") 
@@ -964,7 +969,7 @@ ggsave(plot = ga0, filename = file.path(figDir, "HeavyLight_PredsAndCI_amp.pdf")
 
 pfreq <- Fig2a
 
-pamp <- Fig2b + theme(legend.position = c(.5,.85)) + ylim(c(10,55))
+pamp <- Fig2b + theme(legend.position = c(.5,.85)) + ylim(c(10/2,55/2))
 
   
 
