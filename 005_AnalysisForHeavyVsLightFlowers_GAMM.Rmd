@@ -51,7 +51,11 @@ print(R.version)
 ### Read in data and do some visualizations
 
 ```{r}
-new_df = read.csv(file.path(dataDir, "02_HeavyLight_cleaned.csv"))
+#new_df = read.csv(file.path(dataDir, "02_HeavyLight_cleaned.csv"))
+new_df = read.csv(file.path(dataDir, "02_1_HeavyLight_cleaned_posAdded.csv"))
+
+new_df$amp = new_df$MinMax_amp_Volts
+new_df$amp_acc = new_df$MinMax_amp_acc_m.s.s
 
 # divide amplitude by two
 new_df$amp = new_df$amp / 2
@@ -771,7 +775,36 @@ ggsave(filename = file.path(figDir, "WeightedSham_amp_pointWhiskers_rawData.pdf"
 ```
 
 
-### Put two plots into a single figure
+### Investigate positional amplitude and also compare amplitude from fft 
+
+```{r}
+am1 = lmer(log(acc_amplitude_fft_m.s.s) ~ IT + treatment + (1 | beeID) + IT:treatment, data = new_df)
+summary(am1)
+
+am2 = update(am1, .~. - IT:treatment)
+
+anova(am1, am2) # BIC says go with smaller model
+summary(am2)
+
+
+
+amp1 = lmer(log(pos_amplitude_fft_m) ~ IT +treatment + (1 | beeID) , data = new_df)
+summary(amp1)
+plot(amp1)
+
+ggplot(new_df, aes(x = treatment, y = log(pos_amplitude_fft_m)))+ 
+  geom_boxplot()
+
+
+
+ggplot(new_df, aes(x = treatment, y = log(amp_acc)))+ 
+  geom_boxplot()
+
+
+ggplot(new_df, aes(x = treatment, y = log(pos_amplitude_fft_m)))+ 
+  geom_boxplot()
+
+```
 
 
 
