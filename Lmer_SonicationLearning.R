@@ -1,5 +1,5 @@
 ## Callin Switzer
-## 23 Jan 2016
+## 17 Nov 2017
 ## Multilevel model to visualize bees'
 ## behavior on the artificial pollen system
 
@@ -16,8 +16,8 @@ ipak(packages)
 
 theme_set(theme_bw())
 
-
-sl <- read.csv('freqLearn2.csv')
+dataDir <- "/Users/cswitzer/Dropbox/SonicationLearningManuscript/Data/"
+sl <- read.csv(file.path(dataDir, 'freqLearn2_updated.csv'))
 
 # get hive
 sl$hive <- sapply(1:nrow(sl), FUN = function(ii) {
@@ -35,11 +35,12 @@ sl$beeCol <- tolower(sl$beeCol)
 
 
 
-# TODO: check why there are some values lower than 220 and higher than 450
-sl <- sl[sl$freq > 220 & sl$freq < 450,]
+# make sure there are values lower than 220 and higher than 450 (the cutoff for buzzes used in the experiment)
+hist(sl$freq)
+sl[sl$freq < 220 | sl$freq > 450,] # should have 0 rows
 
 # plot each bee's frequency over time by treatment
-# ggplot(sl, aes(x = freq, y = amp)) + 
+# ggplot(sl, aes(x = freq, y = amp)) +
 #      geom_point()
 
 
@@ -88,8 +89,7 @@ ggplot(sl, aes(x = index, y = freq, color = BeeColorNum)) +
      facet_wrap(~BeeColorNum) + 
      theme(legend.position = "none")
 
-library(lattice)
-bwplot(freq ~  trt | factor(trialNum) , data = sl)
+
 
 hist(sl$freq)
 trt <- character()
@@ -105,6 +105,14 @@ for(ii in 1:nrow(sl)){
 
 
 sl$trt <- trt
+
+# look at treatments
+head(sl)
+xtabs(~sl$BeeColorNum + trt, data = sl )
+
+
+library(lattice)
+bwplot(freq ~  trt | factor(trialNum) , data = sl)
 
 # TODO: exclude individuals that have no "initial" value
 
@@ -144,26 +152,67 @@ ggplot(sl[sl$trialNum == 1 & sl$trt != "unrewarded",] , aes(x = trt, y = freq)) 
      geom_boxplot() + 
      facet_wrap(~ index %% 15)
 
-ggplot(sl[sl$trt != "unrewarded",] , aes(x = trt, y = freq)) + 
-     geom_boxplot() + 
+p = ggplot(sl[sl$trt != "unrewarded",] , aes(x = trt, y = freq)) + 
+     geom_boxplot(fill = "white") + 
      theme_classic() + 
-     labs(x = "Reward Group", y = "Sonication Frequency (Hz)")
-ggsave('~/Desktop/SonicationFreqLearning.pdf', width = 5, height = 4)
+     labs(x = "Reward Group", y = "Sonication Frequency (Hz)") + 
+     scale_x_discrete(name ="Reward Group", 
+                      labels=c("Full", "High", "Low")) + 
+     theme(panel.border = element_blank(),
+           legend.key = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+           panel.background = element_blank(),
+           plot.background = element_rect(fill = "transparent",colour = NA))
+p
+ 
 
-ggplot(sl , aes(x = trt, y = freq)) + 
-     geom_boxplot() + 
+figureDir <- "/Users/cswitzer/Dropbox/SonicationLearningManuscript/Figures/"
+
+ggsave(p, filename = file.path(figureDir, 'SonicationFreqLearning.pdf'),  bg = "transparent", width = 5, height = 4)
+
+# calculate % rewards
+mean(sl$freq[sl$trt == "low"] < 330)
+
+xtabs( ~ sl$trt + sl$lowFrq )
+xtabs( ~ sl$trt + sl$highFrq )
+
+gg = ggplot(sl , aes(x = trt, y = freq)) + 
+     geom_boxplot(fill = "white") + 
      theme_classic() + 
-     labs(x = "Reward Group", y = "Sonication Frequency (Hz)")
-ggsave('~/Desktop/SonicationFreqLearning_unrewarded.pdf', width = 5, height = 4)
+     labs(x = "Reward Group", y = "Sonication Frequency (Hz)") + 
+     scale_x_discrete(name ="Reward Group", 
+                      labels=c("Full", "High", "Low", "Unrewarded")) + 
+     theme(panel.border = element_blank(),
+           legend.key = element_blank(),
+           panel.grid = element_blank(),
+           panel.grid.minor = element_blank(), 
+           panel.grid.major = element_blank(),
+           panel.background = element_blank(),
+           plot.background = element_rect(fill = "transparent",colour = NA))
+gg
+ggsave(gg, filename = file.path(figureDir, 'SonicationFreqLearning_unrewarded.pdf'),  bg = "transparent", width = 5, height = 4)
+
+foo <- sl[sl$trt == "unrewarded", ]
+unique(foo$BeeColorNum)
+
+# ggsave('~/Desktop/SonicationFreqLearning_unrewarded.pdf', width = 5, height = 4)
 
 
 ggplot(sl , aes(x = trt, y = amp)) + 
      geom_boxplot() + 
      theme_classic() + 
      labs(x = "Reward Group", y = "Sonication Amplitude (V)")
-ggsave('~/Desktop/SonicationAmp.pdf', width = 5, height = 4)
+ggsave(file.path(figureDir,'SonicationAmp.pdf'), width = 5, height = 4)
 
 nrow(sl)
+length(unique(sl$BeeColorNum))
+
+unique(sl$hive)
+
+
+
 ll <- sl[sl$trialNum == 1,]
 length(unique(sl$BeeColorNum))
 

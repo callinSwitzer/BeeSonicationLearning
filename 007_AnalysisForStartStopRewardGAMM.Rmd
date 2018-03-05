@@ -1,0 +1,632 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+<pre>
+## Visualize experiment from hives 7-8
+## Bees were given two treatments -- reward first or second
+</pre>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationBehavior")
+```
+
+```{r}
+#install packages
+ipak <- function(pkg){
+     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+     if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+     sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", 
+              "plyr", "effects", "viridis", "GGally", "survminer", 
+              "tidyr","gamm4", "cowplot")
+ipak(packages)
+
+# set ggplot theme
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
+
+# define data and figure directories
+dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+
+
+# print system info
+print(paste("last run ", Sys.time()))
+print(R.version)
+```
+
+
+# Read in data
+```{r}
+bees <- read.csv(file.path(dataDir, "03_StartStop_cleaned.csv"))
+bees$hive = as.factor(bees$hive)
+head(bees)
+
+bees$amp <- bees$amp /2
+bees$amp_acc <- bees$amp_acc/2
+
+# calculate mean freq rewarded vs. unrewarded for each bee
+# to make sure it agrees with what is already in the dataframe
+tapply(bees$freq, INDEX = list(bees$beeID, bees$treatment_rewarded), mean)
+
+# number of bees -- should be 96
+length(unique(bees$BeeNumCol))
+
+
+# number of buzzes per bee
+xtabs(~bees$BeeNumCol)
+
+mean(xtabs(~bees$BeeNumCol))
+
+# means for each treamtment (excluding 0's)
+nzmean <- function(x) {
+    if (all(x==0)) 0 else mean(x[x!=0])
+}
+
+# bees that were rewarded second often stopped earlier
+apply(table(bees$BeeNumCol, bees$treatment), MARGIN = 2, nzmean)
+
+
+# num observations -- should be 5851
+nrow(bees)
+```
+
+## Visualize data
+```{r}
+ggplot(bees, aes(y = freq, x = treatment_rewarded)) +
+     geom_boxplot() +  
+     stat_smooth(method = "loess", span = 0.75)
+
+bees$trt2 <- mapvalues(bees$treatment, from = c("RewFir", "RewSec"), 
+                       to = c("Rewarded -> Unrewarded", "Unrewarded -> Rewarded"))
+
+bees$visitNum_centered <- bees$visitNum - 50
+
+ggplot(bees, aes(x = visitNum_centered, y = freq, color = treatment_rewarded)) +
+     stat_smooth(method = "loess", span = 1) + 
+     xlab("Sonication number\n (0 is when treatment switched)") + 
+     ylab("Sonication Frequency(hz)") + 
+     facet_wrap(~trt2) + 
+     scale_color_viridis(name = "Rewarded Buzzes", 
+                         discrete = TRUE, begin = 0.2, end = 0.6) 
+#ggsave("beeRewards.png", width = 8, height = 5)
+
+
+# make survival plot
+survBees <- t(sapply(unique(bees$beeID), function(x) {
+     tmp <- bees[bees$beeID == x, ]
+     return(tmp[which.max(tmp$visitNum), ])
+}))
+
+
+lastObs <- as.data.frame(survBees)
+lastObs$index <- as.numeric(lastObs$visitNum)
+
+
+# 1 = censored, 2 = stopped buzzing for 5 min
+lastObs$status <- mapvalues(lastObs$index == 100, from = c(TRUE, FALSE), to = c(1, 2))
+
+# create survival object
+lastObs$survObj <- with(lastObs, Surv(index, status == 2))
+head(lastObs)
+
+lastObs$treatment <- as.factor(unlist(lastObs$treatment))
+
+
+## Kaplan-Meier estimator. 
+lastObs$Treatment <- mapvalues(lastObs$treatment, from = c("RewFir", "RewSec"), to = c("Reward -> No Reward", "No Reward -> Reward"))
+
+km.as.one <- survfit(survObj ~ 1, data = lastObs, conf.type = "log-log")
+km.by.trt <- survfit(survObj ~ Treatment, data = lastObs, conf.type = "log-log")
+
+s1 <- coxph(survObj ~ 1, data = lastObs) 
+s2 <- coxph(survObj ~ Treatment, data = lastObs) 
+s2
+anova(s1, s2)
+
+s3 <- coxph(survObj ~ Treatment + unlist(IT_mm), data = lastObs) 
+summary(s3) # IT not important in Cox model
+
+
+
+s3 <- coxph(survObj ~ I(lastObs$visitNum > 50), data = lastObs) 
+
+# test proportional hazard assumption
+testph <- cox.zph(s2) # no evidence that prop haz assumption is violated
+ggcoxzph(testph)
+
+
+par(mfrow = c(1,1))
+plot(km.by.trt)
+
+gsv <- ggsurvplot(km.by.trt, CI = FALSE) 
+
+
+gsv$plot + facet_wrap(~Treatment) + 
+     theme_bw()   + 
+    theme(panel.grid.major = element_line(colour = "grey50", size = 0.1), 
+          panel.grid.minor = element_line(colour = "grey50", size = 0.1), 
+          strip.background =element_rect(fill="white"))+
+     theme(legend.position = "none")  + 
+     scale_color_viridis(discrete = TRUE, begin = 0.3, end = 0.7, option = "magma")  + 
+     xlab("Sonication Number") + 
+     ylab("Cumulative Proportion Sonicating")  + 
+  geom_vline(aes(xintercept = 50), lty = 2)
+
+ggsave(file.path(figDir, "beeSonicationPercentage.pdf"), width = 5, height = 3)
+
+
+ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4"), plot.cens = FALSE) + 
+     ylim(c(0, 1)) + 
+     xlab("Sonication Number") + 
+     ylab("Cumulative Proportion Sonicating") + 
+  theme(legend.position = c(0.75, 0.86), 
+        legend.background = element_rect(fill = 'grey95')) + 
+  geom_vline(aes(xintercept = 50), lty = 2, lwd = 0.2)
+
+ggsave(file.path(figDir, "beeSonicationPercentage_onePlot.pdf"), width = 5, height = 3.5)
+
+xtabs(~lastObs$treatment + as.character(lastObs$hive))
+
+```
+
+
+### Visualize data -- refref: averaged by bee and trial
+
+This is not super informative
+
+```{r}
+beeAvgs = bees[bees$visitNum == 1, ]
+nrow(beeAvgs) # should be 96
+head(beeAvgs)
+
+
+data_long <- gather(beeAvgs[, c("BeeNumCol", "meanFreqRewarded", "meanFreqUnrewarded")], condition, meanFreq, meanFreqRewarded, meanFreqUnrewarded)
+head(data_long)
+
+
+ggplot(data_long, aes(x = condition, y = meanFreq)) + 
+  geom_boxplot()
+
+# look at diffs
+beeAvgs$buzzDiff = beeAvgs$meanFreqRewarded - beeAvgs$meanFreqUnrewarded
+hist(beeAvgs$buzzDiff)
+```
+
+
+
+
+# Analysis with start/stop trials
+
+#### GAMM4 shows time series
+
+```{r}
+
+# start with gamm so I can show change by visit number
+
+#                          s(visitNum_centered, by = trt2) +  trt2 + IT_mm*treatment_rewarded + hive , random =  ~(1|beeID)
+g00 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2) + trt2 + treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
+par(mfrow = c(2,3))
+aab <- plot(g00$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g00$gam) 
+summary(g00$mer)
+dev.off()
+
+summary(g00$mer)
+summary(g00$gam)
+
+g01 = gamm4(log(amp_acc) ~ s(visitNum_centered) + trt2 + treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
+anova(g00$mer, g01$mer) # stay with g01
+summary(g01$mer)
+summary(g01$gam)
+
+
+g01.1 <- gamm4(log(amp_acc) ~ trt2 + treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
+anova(g01$mer, g01.1$mer) # keep g01.1
+summary(g01.1$mer)
+
+
+g03 <- gamm4(log(amp_acc) ~ treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
+anova(g01.1$mer, g03$mer) # g03 better
+summary(g03$mer) # stay with g03
+
+
+g04 <- gamm4(log(amp_acc) ~  treatment_rewarded + IT_mm + hive , random =  ~(1|beeID), data = bees)
+anova(g03$mer, g04$mer) # g03 better
+summary(g03$mer) # stay with g03
+
+# refit with lmer
+
+ITmean = mean(tapply(bees$IT_mm, INDEX = bees$beeID, FUN = function(x) x[1] ))
+
+# scale IT_mm to make it easier to interpret the coefficient for treatment -- 0 will be the mean IT span
+g03 <- lmer(log(amp_acc) ~ treatment_rewarded * I(IT_mm - ITmean) + hive + (1|beeID), data = bees, REML = TRUE)
+summary(g03) # summary for paper
+
+finmod <- g03
+ITmean
+
+
+# look at model without interaction
+# look at model without interaction
+finmod_noInt_acc <- lmer(log(amp_acc) ~ treatment_rewarded + I(IT_mm - ITmean) + hive + (1|beeID), data = bees, REML = TRUE)
+summary(finmod_noInt_acc)
+anova(finmod, finmod_noInt_acc) # interaction makes model much better
+
+# compare model with and without treatment
+anova(finmod_noInt_acc, update(finmod_noInt_acc, .~. - treatment_rewarded)) # treatment is a significant predictor
+
+
+## predict gamm
+
+# using hive 7, since it's the one with the most data
+
+# calculate an average IT for prediction
+
+pframe = expand.grid(trt2 = levels(droplevels(bees$trt2)), 
+                     visitNum_centered = -50:50, 
+                     IT_mm = c(seq(min(bees$IT_mm), max(bees$IT_mm), length.out = 50), ITmean),
+                     hive = factor(c(7, 8), levels = levels(bees$hive)), 
+                     beeID = 99999, 
+                     treatment_rewarded = levels(bees$treatment_rewarded))
+
+pframe$amp_acc <- 0
+
+pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
+                    pframe$treatment_rewarded == " F" & 
+                    pframe$visitNum_centered > 0) |
+                    (pframe$trt2 == "Rewarded -> Unrewarded" &
+                    pframe$treatment_rewarded == " T" & 
+                    pframe$visitNum_centered < 0) |
+                    (pframe$trt2 == "Unrewarded -> Rewarded" &
+                    pframe$treatment_rewarded == " F" & 
+                    pframe$visitNum_centered < 0) |
+                    (pframe$trt2 == "Unrewarded -> Rewarded" &
+                    pframe$treatment_rewarded == " T" & 
+                    pframe$visitNum_centered > 0) 
+                    , ]
+
+# predict make plots, using full model (g00)
+
+pp <- exp(predict(finmod, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
+
+# refref change to 10K
+nbootSims2 = 1000
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<- exp(bb2_se[1,]) # exponentiate to put on original scale
+pframe$bhi<- exp(bb2_se[2,])
+pframe$predMean <- pp
+pframe
+
+pframe$treatment_rewarded2 <- mapvalues(pframe$treatment_rewarded, from = c(" F", " T"), 
+                                        to = c("No Reward", "Reward"))
+
+pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Reward")
+
+# Holding IT = meanIT
+print(ITmean)
+ampPlot <- ggplot(pframe[(pframe$IT_mm == ITmean) & pframe$visitNum_centered == 1 & pframe$hive == 7, ], aes(x=treatment_rewarded2, y=predMean))+
+     geom_point()+ 
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) +
+  annotate(geom="text", x=c(1,2), y=c(0, 0) + 57, label=c("a", "b"),
+                color="black") 
+ampPlot
+ggsave(plot = ampPlot, filename = file.path(figDir, "StartStopBootAmp.pdf"), width =2.5, height = 3)
+
+
+
+# Holding IT = meanIT
+print(ITmean)
+ampPlot1 <- ggplot(pframe[(pframe$IT_mm == ITmean) & pframe$visitNum_centered == 1 & pframe$hive == 7, ], aes(x=treatment_rewarded2, y=predMean))+
+     geom_point()+ 
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) 
+ampPlot1
+ggsave(plot = ampPlot1, filename = file.path(figDir, "StartStopBootAmp_noAnnot.pdf"), width =2.5, height = 3)
+
+# show how IT affects amplitude
+summary(finmod)
+
+print(ITmean)
+pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
+pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
+
+# cut predictions to within range of data
+pframe[pframe$Colony == "4" & pframe$`IT_mm`<3.5, ] = NA
+pframe = pframe[complete.cases(pframe), ]
+pframe = droplevels(pframe)
+
+ampPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
+     geom_line()+ 
+  facet_grid( Colony~treatment_rewarded2 , labeller = labeller(treatment_rewarded2= label_value, Colony = label_both)) +
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi), alpha = 0.2)
+ampPlotIT
+ggsave(plot = ampPlotIT, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP.pdf"), width =4, height = 3)
+
+
+
+
+ampPlotIT2 <- ggplot(pframe, aes(x=IT_mm, y=predMean, color = treatment_rewarded2, fill  = treatment_rewarded2))+
+     geom_line()+ 
+  facet_grid( ~Colony , labeller = labeller(treatment_rewarded2= label_value, Colony = label_both), scales = 'free') +
+     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi), color = NA, alpha = 0.2) + 
+  scale_color_viridis(discrete = TRUE, name = "Treatment", begin =0.3, end = 0.8) + 
+  scale_fill_viridis(discrete = TRUE, name = "Treatment", begin =0.3, end = 0.8) + 
+  theme(legend.position = c(0.75, 0.8), 
+        legend.background = element_rect(fill = "grey95"))
+ampPlotIT2
+ggsave(plot = ampPlotIT2, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2.pdf"), width =4, height = 3)
+
+bees$Hive <- mapvalues(bees$hive, from = c(7, 8), to = c("4", "5"))
+bees$Colony <- mapvalues(bees$hive, from = c(7, 8), to = c("4", "5"))
+
+ampPlot_rug <- ampPlotIT2 + geom_rug(data = bees[!duplicated(bees$IT_mm),], inherit.aes = FALSE, aes(x = IT_mm)) + 
+  facet_wrap(~Colony, labeller = label_both, scales = "free_x") + 
+  theme(strip.background =element_rect(fill = "white", linetype = 1, size = 1, color = 'black')) + 
+    theme(legend.position = c(0.75, 0.81), 
+        legend.background = element_rect(fill=alpha('gray95', 1)))
+ampPlot_rug
+
+ggsave(plot = ampPlot_rug, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2_rug.pdf"), width =5, height = 3.5)
+
+
+Fig32 <- ampPlot_rug
+
+
+```
+
+
+
+
+
+### GAMM for freq
+
+```{r}
+
+# start with gamm so I can show change by visit number
+g01 = gamm4(freq ~ s(visitNum_centered, by = trt2) +  trt2 + IT_mm*treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
+par(mfrow = c(2,3))
+aab <- plot(g01$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g01$gam) # Summary for paper 
+summary(g01$mer)
+dev.off()
+
+g02 = gamm4(freq ~ s(visitNum) +  trt2 + IT_mm*treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
+anova(g01$mer, g02$mer) # go with g02
+summary(g02$mer)
+
+g03 <- gamm4(freq ~  trt2 + IT_mm*treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
+anova(g02$mer, g03$mer) # go with g03
+summary(g03$mer)
+
+g04 <- gamm4(freq ~ IT_mm*treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
+anova(g03$mer, g04$mer) # g04
+summary(g04$mer)
+
+
+g05 <- gamm4(freq ~ IT_mm+treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
+anova(g04$mer, g05$mer) # stay with g04
+
+ITmean = mean(tapply(bees$IT_mm, INDEX = bees$beeID, FUN = function(x) x[1] ))
+
+# change IT to be centered at the mean to make other vairables more interpretable
+finmod <- lmer(freq ~ I(IT_mm-ITmean)*treatment_rewarded + hive + (1|beeID), data = bees)
+summary(finmod)
+
+plot(finmod)
+qqnorm(ranef(finmod)$beeID[[1]])
+qqline(ranef(finmod)$beeID[[1]])
+
+sjp.lmer(finmod, type = "re", sort = TRUE) # plot random effects to find any outliers
+sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+
+
+# look at model without interaction
+finmod_noInt <- lmer(freq ~ I(IT_mm-ITmean) + treatment_rewarded + hive + (1|beeID), data = bees)
+summary(finmod_noInt) 
+
+# compare model with and without treatment for frequ
+anova(finmod_noInt, update(finmod_noInt, .~. - treatment_rewarded)) # treatment is a significant predictor
+
+
+
+
+## predict lmer
+
+# using hive 7, since it's the one with the most data
+
+# calculate an average IT for prediction
+
+pframe = expand.grid(trt2 = levels(droplevels(bees$trt2)), 
+                     visitNum_centered = -50:50, 
+                     IT_mm = c(seq(min(bees$IT_mm), max(bees$IT_mm), length.out = 50), ITmean),
+                     hive = factor(c(7, 8), levels = levels(bees$hive)), 
+                     beeID = 99999, 
+                     treatment_rewarded = levels(bees$treatment_rewarded))
+
+pframe$freq <- 0
+
+pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
+                    pframe$treatment_rewarded == " F" & 
+                    pframe$visitNum_centered > 0) |
+                    (pframe$trt2 == "Rewarded -> Unrewarded" &
+                    pframe$treatment_rewarded == " T" & 
+                    pframe$visitNum_centered < 0) |
+                    (pframe$trt2 == "Unrewarded -> Rewarded" &
+                    pframe$treatment_rewarded == " F" & 
+                    pframe$visitNum_centered < 0) |
+                    (pframe$trt2 == "Unrewarded -> Rewarded" &
+                    pframe$treatment_rewarded == " T" & 
+                    pframe$visitNum_centered > 0) 
+                    , ]
+
+
+
+# predict make plots, using full model 
+
+pp <- predict(finmod, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
+
+
+# refref: change to 10K
+nbootSims2 = 10000
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<- (bb2_se[1,]) # exponentiate to put on original scale
+pframe$bhi<- (bb2_se[2,])
+pframe$predMean <- pp
+pframe
+
+
+pframe$treatment_rewarded2 <- mapvalues(pframe$treatment_rewarded, from = c(" F", " T"), 
+                                        to = c("No Reward", "Reward"))
+
+pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Reward")
+
+# Holding IT = meanIT
+print(ITmean)
+
+
+freqPlot <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm == ITmean & !(duplicated(pframe[, c("blo", "bhi", "predMean")])), ], aes(x=treatment_rewarded2, y=predMean))+
+     geom_point()+ 
+     labs(y = "Sonication Frequency (Hz)", x = "Treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)
+freqPlot
+ggsave(plot = freqPlot, filename = file.path(figDir, "StartStop_Freq_noAnnot.pdf"), width =2.5, height = 3)
+
+
+ITmean
+
+
+pframe["IT Span"] <- round(pframe$IT_mm, digits = 2)
+pframe$IT_mm <- round(pframe$IT_mm, digits = 2)
+unique(pframe$IT_mm)[seq(1, length(unique(pframe$IT_mm)), length.out = 6)]
+
+freqPlotIT <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm %in% unique(pframe$IT_mm)[seq(1, length(unique(pframe$IT_mm)), length.out = 6)] & !(duplicated(pframe[, c("blo", "bhi", "predMean")])), ], aes(x=treatment_rewarded2, y=predMean))+
+     geom_point()+ 
+     labs(y = "Sonication Frequency (Hz)", x = "Treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) + 
+  facet_wrap(~`IT Span`, labeller = label_both)
+freqPlotIT
+ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStop_Freq_noAnnot_IT.pdf"), width =2.5, height = 3)
+
+
+summary(finmod)
+
+
+pframe$Hive <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
+pframe$Colony <- mapvalues(pframe$hive, from = c(7, 8), to = c("4", "5"))
+
+# cut predictions to within range of data
+pframe[pframe$Colony == "4" & pframe$`IT Span`<3.5, ] = NA
+
+pframe = pframe[complete.cases(pframe), ]
+
+pframe = droplevels(pframe)
+
+summary(pframe)
+
+freqPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
+     geom_line(aes(color = treatment_rewarded2))+ 
+  facet_grid(.~Colony, labeller= label_both, scales = "free_x") +
+     labs(y = "Sonication Frequency (Hz)", x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi, fill = treatment_rewarded2), alpha = 0.2) + 
+  scale_color_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = c(0.31, 0.81), 
+        legend.background = element_rect(fill=alpha('gray95', 1)))
+  
+freqPlotIT
+ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStopBootFreq_ITHivePlot_SUPP2.pdf"), width =4, height = 3)
+
+
+freqPlot_rug <- freqPlotIT + geom_rug(data = bees[!duplicated(bees$IT_mm),], inherit.aes = FALSE, aes(x = IT_mm)) + 
+  facet_wrap(~Colony, labeller = label_both, scales = "free_x") + 
+  theme(strip.background =element_rect(fill = "white", linetype = 1, size = 1, color = 'black')) + 
+  theme(legend.position = c(0.17, 0.81), 
+        legend.background = element_rect(fill=alpha('gray95', 1)))
+freqPlot_rug
+ggsave(plot = freqPlot_rug, filename = file.path(figDir, "StartStopBootFreq_ITHivePlot_SUPP2_rug.pdf"), width =5, height = 3.5)
+
+Fig31 <- freqPlot_rug
+
+# make plot for one hive only
+freqPlotIT_oneHIve <- ggplot(pframe[pframe$hive == 7, ], aes(x=IT_mm, y=predMean))+
+     geom_line(aes(color = treatment_rewarded2))+
+     labs(y = "Sonication Frequency (Hz)", x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi, fill = treatment_rewarded2), alpha = 0.2) + 
+  scale_color_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = c(0.75, 0.8), 
+        legend.background = element_rect(fill=alpha('gray95', 1)))
+  
+freqPlotIT_oneHIve
+ggsave(plot = freqPlotIT_oneHIve, filename = file.path(figDir, "StartStopBootFreq_ITOneHivePlot_SUPP2.pdf"), width =5, height = 3.7)
+
+
+```
+
+
+
+### Combine plots into a single figure
+
+```{r}
+
+p1 <- Fig31 + xlab("") + theme(legend.position = "none", 
+                               strip.background = element_blank(), 
+                               axis.text.x=element_blank(), 
+                               axis.ticks.x=element_blank()) + 
+            labs(y = "Sonication frequency (Hz)") 
+p2 <- Fig32 + theme(strip.background = element_blank(),
+  strip.text.x = element_blank())
+
+
+aa <- plot_grid(p1, p2, align = 'v', axis = 'l', rel_widths = c(1,1), ncol = 1, nrow = 2)
+
+ggdraw(aa)
+
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_IT.pdf"), plot = aa, base_width = 5, base_height = 5)
+
+
+
+
+
+###
+p1 <- freqPlot + labs(x = "")
+p2 <- ampPlot1 + labs(x ="") + scale_y_continuous(breaks=seq(45,55,5))
+
+
+aa <- plot_grid(p1, p2, align = 'h', axis = 'l', rel_widths = c(1,1))
+
+ab <- add_sub(aa, "Reward Treatment", x = 0.53, y = 1, vjust = -0.2)
+ggdraw(ab)
+
+ac <- plot_grid(p1, p2, align = 'h', axis = 'l', rel_widths = c(1,1), labels = "AUTO")
+ad <- add_sub(ac, "Reward Treatment", x = 0.53, y = 1, vjust = -0.2)
+ggdraw(ad)
+
+
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_noxlab.pdf"), plot = aa, base_width = 5.4, base_height = 3)
+
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew.pdf"), plot = ab, base_width = 5.4, base_height = 3.4)
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_annot.pdf"), plot = ad, base_width = 5.4, base_height = 3.9)
+
+```
+
+
+
+

@@ -1,0 +1,1026 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+<pre>
+# Heavy vs. light flowers
+# Callin Switzer
+# 12 October 2016
+# update 8 Dec 2017
+# 
+# Compares the bees' frequency when they are buzzing on 
+# heavy (metal added) vs. light flowers
+# Note: all pores were glued shut
+</pre>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationBehavior")
+```
+
+
+
+```{r}
+#install packages
+ipak <- function(pkg){
+     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+     if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+     sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects", "gamm4", "viridis", 
+              "cowplot")
+ipak(packages)
+
+# set ggplot theme
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
+
+# define data and figure directories
+dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+
+
+# print system info
+print(paste("last run ", Sys.time()))
+print(R.version)
+```
+
+
+### Read in data and do some visualizations
+
+```{r}
+#new_df = read.csv(file.path(dataDir, "02_HeavyLight_cleaned.csv"))
+new_df = read.csv(file.path(dataDir, "02_1_HeavyLight_cleaned_posAdded.csv"))
+
+new_df$amp = new_df$MinMax_amp_Volts
+new_df$amp_acc = new_df$MinMax_amp_acc_m.s.s
+
+# divide amplitude by two
+new_df$amp = new_df$amp / 2
+new_df$amp_acc = new_df$amp_acc / 2
+
+new_df$hive = as.factor(new_df$hive)
+new_df$treatment <- mapvalues(new_df$treatment, from = c("sham", "weighted"), to = c("Sham", "Weighted"))
+head(new_df)
+
+# calculate average number of each treatment
+ll = list(tapply(new_df$treatment, new_df$beeID, table))
+dd = data.frame(unlist(ll))
+dd$beeTrt = row.names(dd)
+dd$beeID = sapply(dd$beeTrt, FUN = function(x) strsplit(x, "\\.")[[1]][1])
+dd$trt = sapply(dd$beeTrt, FUN = function(x) strsplit(x, "\\.")[[1]][2])
+
+# shows average number of buzzes per treatment
+tapply(dd$unlist.ll., INDEX = dd$trt, mean)
+tapply(dd$unlist.ll., INDEX = dd$trt, sd) # sd for number of buzzes
+
+# show histograms of frequencies
+hist(new_df$freq, breaks = seq(215, 455, by = 10))
+
+# Calculate average for each bee and for each treatment
+frqMeans <- as.data.frame(tapply(X = new_df$freq, INDEX = list(new_df$beeID, new_df$treatment), mean))
+frqMeans$beeID <- row.names(frqMeans)
+frqMeans
+
+
+# convert to long format for ggplot-ing
+frqLong <- melt(frqMeans, id.vars = "beeID", measure.vars =  c("Sham", "Weighted"), 
+     variable.name = "trt", value.name = "frq")
+nrow(frqLong)
+
+ggplot(frqLong, aes(x = trt, y = frq)) + 
+     geom_boxplot() + 
+    geom_line(aes(group = beeID))+
+     geom_point()
+
+
+ggplot(frqLong, aes(x = trt, y = frq)) + 
+     geom_boxplot() + 
+     labs(y = "Buzz Frequency (Hz)", x = "Flower treatment")
+#ggsave(file.path(figDir, "heavyLight_frq.pdf"), width = 5, height = 4)
+
+# print some descriptive statistics
+nrow(new_df)
+unique(new_df$hive)
+
+
+
+# Calculate average amplitude for each bee and for each treatment
+ampMeans <- as.data.frame(tapply(X = new_df$amp_acc, INDEX = list(new_df$beeID, new_df$treatment), mean))
+
+ampMeans$beeID <- row.names(ampMeans)
+ampMeans
+
+
+ampLong <- melt(ampMeans, id.vars = "beeID", measure.vars =  c("Sham", "Weighted"), 
+                variable.name = "trt", value.name = "amp")
+
+ggplot(ampLong, aes(x = trt, y = amp)) + 
+     geom_boxplot() + 
+     geom_point()  + 
+  labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment")
+
+ggplot(ampLong, aes(x = trt, y = amp)) + 
+     geom_boxplot() + 
+     geom_point() +
+  geom_line(aes(group = beeID))
+
+
+ggplot(ampLong, aes(x = trt, y = amp)) + 
+     geom_boxplot() + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment")
+#ggsave(file.path(figDir, 'heavyLightAmp.pdf'), width = 5, heigh = 4)
+
+nrow(ampLong)
+```
+
+
+### Modeling frequency with GAMM
+
+Use BIC to select model (decide what interactions and covariates to use)
+
+Make sure that REML = FALSE when comparing BIC values
+
+Start with the biggest model of interest, and then see what predictors can be removed
+
+```{r}
+rr = new_df$treatment[1]
+df1 = new_df[1, ]
+for(ii in 1:(nrow(new_df) -1)){
+  if(rr == new_df$treatment[ii + 1]) next
+  else{
+    df1  = rbind(df1, new_df[ii+1, ])
+    rr = new_df$treatment[ii + 1]
+  }
+}
+
+df1 <- df1[df1$rewNum != 1, ]
+df1$trtSwitch = df1$rewNum
+colnames(df1)
+df2 <- df1[, c("beeID", "hive", "trtSwitch", "IT")]
+df2
+
+sum(duplicated(df2$beeID))
+
+newdf2 <- merge(new_df, df2)
+head(newdf2)
+
+
+newdf2$visitNum_centered <- newdf2$rewNum - newdf2$trtSwitch
+
+# get treatment
+trts <- (sapply(unique(newdf2$beeID), FUN = function(x){
+  startt = newdf2[newdf2$beeID == x & newdf2$rewNum == 1, "treatment" ]
+  return(as.character(startt))
+}))
+
+df4 <- data.frame(beeID = unique(newdf2$beeID), trts = trts)
+
+newdf3 <- merge(newdf2, df4)
+
+newdf3$trt2 <- as.factor(paste(newdf3$trts, "first"))
+
+head(newdf3)
+
+
+# GAMM
+# start with gamm so I can show change by visit number
+g01 = gamm4(freq ~ s(visitNum_centered, by = trt2) + IT + hive + treatment + trt2, random =  ~(1|beeID), data = newdf3)
+par(mfrow = c(2,3))
+aab <- plot(g01$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g01$gam) # Summary for paper 
+summary(g01$mer)
+dev.off()
+
+
+g02 = gamm4(freq ~ s(visitNum_centered, by = trt2) +  hive + treatment + trt2, random =  ~(1|beeID), data = newdf3)
+anova(g01$mer, g02$mer) #g02 better
+summary(g02$mer)
+
+
+g03 =  gamm4(freq ~ s(visitNum_centered, by = trt2) +  hive + trt2, random =  ~(1|beeID), data = newdf3)
+anova(g02$mer, g03$mer) #g03 better
+summary(g03$mer)
+
+
+g04 = gamm4(freq ~ s(visitNum_centered, by = trt2) +trt2, random =  ~(1|beeID), data = newdf3)
+anova(g03$mer, g04$mer) # g04 better
+summary(g04$mer)
+
+g05 = gamm4(freq ~ s(visitNum_centered) +trt2, random =  ~(1|beeID), data = newdf3)
+anova(g04$mer, g05$mer) # g05 slightly better (according to BIC)
+
+summary(g05$gam)
+
+
+g06 = gamm4(freq ~ s(visitNum_centered), random =  ~(1|beeID), data = newdf3)
+anova(g05$mer, g06$mer) # g05 slightly better (according to BIC)
+
+summary(g06$mer) # g06 Better
+
+g07 = gamm4(freq ~ 1, random =  ~(1|beeID), data = newdf3)
+anova(g06$mer, g07$mer) # g07 better
+
+# looks like GAMM is not necessary -- no predictors significantly affect frequency
+```
+
+
+### Modeling frequency with lmer
+
+#### Do a similar thing to GAMM above (but make it more interpretable)
+
+```{r modeling1}
+# fit lmer that is similar to gamm above
+# interaction that may be important, based on domain knowledge
+m0 = lmer(freq ~ I(scale(visitNum_centered)) * trt2 + I(scale(IT)) * treatment + hive  + I(scale(visitNum_centered^2)) + I(scale(IT)^2) +   (1|beeID), data = newdf3, REML = FALSE)
+
+summary(m0)
+
+
+
+
+
+
+# no interaction
+m1 = update(m0, .~. - I(scale(visitNum_centered^2)))
+BIC(m0, m1) # stay with m1 -- no interaction
+anova(m0, m1) # agrees with BIC
+
+summary(m1)
+
+m1.1 <- update(m1, .~. - I(scale(visitNum_centered)):trt2)
+anova(m1.1, m1) # keep 1.1
+summary(m1.1)
+
+m2 <- update(m1.1, .~. - hive)
+anova(m1.1, m2) # keep m2 (based on BIC)
+
+summary(m2)
+
+m3 <- update(m2, .~. - I(scale(IT)^2))
+anova(m2, m3) # keep m3
+
+summary(m3)
+
+m3.1 <- update(m3, .~. - trt2)
+anova(m3, m3.1) # keep m3.1
+summary(m3.1)
+
+m4 <- update(m3.1, .~. - treatment)
+
+anova(m3.1, m4) #keep m4
+summary(m4)
+
+
+m5 <- update(m4, .~. -I(scale(IT)):treatment)
+anova(m4, m5) # keep m5 -- baesd on BIC (agrees with GAMM analysis above)
+
+summary(m5)
+
+
+m6 <- update(m5, .~. - I(scale(IT)))
+anova(m5, m6)
+
+summary(m6) 
+
+m7 <- update(m6, .~. - I(scale(visitNum_centered)))
+anova(m6, m7) # keep m7
+
+summary(m7)
+
+# get p-value for treament  for paper
+
+m_trt <- update(m7, .~. + treatment)
+anova(m7, m_trt) # p-val for paper
+
+
+m_IT <- update(m7, .~. + IT)
+anova(m7, m_IT) # p-val for IT span
+
+
+# final freq mod for paper
+finmod <- update(m7, .~., REML = TRUE)
+summary(finmod) # final model for paper -- same as gamm
+
+
+summary(finmod) # summary for paper -- no predictors predict frequency (when accounting for beeID)
+plot(finmod)
+qqnorm(ranef(finmod)$beeID[[1]])
+qqline(ranef(finmod)$beeID[[1]])
+
+sjp.lmer(finmod, type = "re", sort = TRUE) # plot random effects to find any outliers
+# sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+```
+
+
+
+
+### Bootstrap CI's for figure for paper
+
+```{r bootstrap1, cache = TRUE}
+# set number of bootstrap replicates for models
+nbootSims = 10000
+
+table(new_df$hive) # more trials from hive 3
+
+# using hive 3, since it's the one with the most data
+# however, hive doesn't affect model anyway
+
+# calculate an average IT for prediction
+ITmean = mean(tapply(new_df$IT, INDEX = new_df$beeID, FUN = function(x) x[1] ))
+
+pframe <- expand.grid(trt2 = levels(droplevels(newdf3$trt2)),
+                     IT = ITmean,
+                     visitNum_centered = -50:50, 
+                     hive = factor(3, levels = levels(newdf3$hive)),  
+                     beeID = 99999, 
+                     treatment = levels(newdf3$treatment))
+pframe$freq <- 0
+pframe <- pframe[(pframe$trt2 == "Sham first" &
+                    pframe$treatment == "Sham" & 
+                    pframe$visitNum_centered < 0) |
+                    (pframe$trt2 == "Sham first" &
+                    pframe$treatment == "Weighted" & 
+                    pframe$visitNum_centered > 0) |
+                    (pframe$trt2 == "Weighted first" &
+                    pframe$treatment == "Weighted" & 
+                    pframe$visitNum_centered < 0) |
+                    (pframe$trt2 == "Weighted first" &
+                    pframe$treatment == "Sham" & 
+                    pframe$visitNum_centered > 0) 
+                    , ]
+
+# make a model to show the effect of treatment in a plot
+m1 <- update(finmod, .~. + treatment)
+pp <- predict(m1, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(m1, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<-bb2_se[1,]
+pframe$bhi<-bb2_se[2,]
+pframe$predMean <- pp
+pframe
+
+### Make frequency plots for paper
+
+
+# predictions are from this model
+summary(m1)
+anova(m1, update(m1, .~. - treatment)) #p-val and BIC for paper
+
+pframe$trt3 <- mapvalues(pframe$trt2, from = c("Sham first", "Weighted first"), 
+                          to = c("Sham -> Weighted", "Weighted -> Sham"))
+
+
+g0 <- ggplot(pframe, aes(x=visitNum_centered, y=predMean))+
+     geom_line(aes(color = treatment))+ 
+     labs(y = "Sonication frequency (Hz)", x = "Sonication number\n (0 is when treatment switched)") + 
+     geom_ribbon(aes(x = visitNum_centered, ymin = blo, ymax = bhi, fill= treatment), alpha = 0.2) + 
+  facet_wrap(~trt3) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = c(0.5, 0.90), 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") + 
+  ylim(c(330, 370))
+g0
+ggsave(filename = file.path(figDir, "WeightedSham_Freq_Timeseries.pdf"), width =5, height = 3.6)
+
+
+g1 <- g0 + geom_point(data = newdf3[newdf3$visitNum_centered < 50,],
+                aes(x = visitNum_centered, y = freq), position = position_jitter(height = 5), size = 0.1, pch = 16, alpha = 0.4) + 
+  ylim(c(220, 470))
+
+g1 # note that the distribution of frequency is a bit bimodal -- this could be 
+# a problem, so we ran the analysis with a freq cutoff at 270
+# we found no significant differences in the models either way.
+ggsave(filename = file.path(figDir, "WeightedSham_Freq_Timeseries_RawData.pdf"), width =5, height = 3.6)
+
+
+g1 <- g0 + geom_point(data = newdf3[newdf3$visitNum_centered < 50,],
+                aes(x = visitNum_centered, y = freq), position = position_jitter(height = 5), size = 0.1, pch = 16, alpha = 0.4) + 
+  ylim(c(270, 480))
+
+g1
+ggsave(filename = file.path(figDir, "WeightedSham_Freq_Timeseries_RawData_trimmed.pdf"), width =5, height = 3.6)
+
+
+
+# mean and 95% CI (without visit number)
+
+g0_freq <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
+    geom_point(aes(color = treatment), alpha = 1) + 
+     labs(y = "Sonication frequency (Hz)", x = "Flower treatment") + 
+     geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0, end = 0, option = "A") + 
+  theme(legend.position = "none", 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") 
+g0_freq
+ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers_BW.pdf"), width =2.5, height = 3)
+
+
+
+g0 <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
+    geom_point(aes(color = treatment), alpha = 1) + 
+     labs(y = "Sonication frequency (Hz)", x = "Flower treatment") + 
+     geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = "none", 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") 
+g0
+ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers.pdf"), width =5, height = 3.6)
+
+
+Fig2a <- g0
+
+
+
+## add raw data
+g1 <- g0 + geom_point(data = newdf3, aes(x = treatment, y = freq, color = treatment), position = position_jitter(width = 0.1, height = 6), alpha = 0.4, pch = 16, size = 0.2)
+g1
+
+ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers_rawData.pdf"), width =5, height = 3.6)
+
+
+
+
+# "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
+g0 <- ggplot(pframe, aes(x=visitNum_centered, y=predMean))+
+     geom_point()+ 
+     labs(y = "Sonication frequency (Hz)", x = "buzzNumber") + 
+     geom_ribbon(aes(x = visitNum_centered, ymin = blo, ymax = bhi), alpha = 0.2) + 
+  facet_wrap(~trt2)
+g0
+
+# plot effect to see if it agrees
+plot(Effect(c("treatment"), m1))
+
+```
+
+
+
+### Modeling amplitude with gamm
+
+```{r modeling-amp1}
+g01 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2) + trt2 + IT + hive + treatment, random =  ~(1|beeID), data = newdf3)
+par(mfrow = c(2,3))
+aab <- plot(g01$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g01$gam) # Summary for paper 
+summary(g01$mer)
+dev.off()
+
+
+g011 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2)  + IT + hive + treatment, random =  ~(1|beeID), data = newdf3)
+par(mfrow = c(2,3))
+aab <- plot(g011$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g011$gam) 
+summary(g011$mer)
+dev.off()
+anova(g01$mer, g011$mer) # go with g011
+
+
+g02 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2)  + IT  + treatment, random =  ~(1|beeID), data = newdf3)
+par(mfrow = c(2,3))
+aab <- plot(g02$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g02$gam) # Summary for paper 
+summary(g02$mer)
+dev.off()
+
+anova(g011$mer, g02$mer) # g02 better
+
+
+g03 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2)  + treatment, random =  ~(1|beeID), data = newdf3)
+
+anova(g02$mer, g03$mer) #keep g03
+summary(g03$mer)
+
+g04 <- gamm4(log(amp_acc) ~ s(visitNum_centered)  + treatment, random =  ~(1|beeID), data = newdf3)
+
+anova(g03$mer, g04$mer) #g04 better
+summary(g04$gam) # approx p-value for smooth
+summary(g04$mer)
+
+
+
+
+g44 <- gamm4(log(amp_acc) ~ visitNum_centered  + treatment, random =  ~(1|beeID), data = newdf3)
+g05 <- gamm4(log(amp_acc) ~ treatment, random =  ~(1|beeID), data = newdf3)
+
+anova(g44$mer, g05$mer) #g44 better
+
+g06 <- gamm4(log(amp_acc) ~ visitNum_centered , random =  ~(1|beeID), data = newdf3)
+anova(g44$mer, g06$mer) #g044 better
+
+# final model -- only treatment matters
+ampMod <- g04
+summary(ampMod$mer)
+summary(ampMod$gam)
+
+plot(ampMod$mer)
+par(mfrow = c(2,1))
+plot(ampMod$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+dev.off()
+```
+
+
+
+### Modeling amplitude with lmer
+
+```{r modeling-amp3}
+# log transform for acceleration helps model fit better
+# start with large model (including interaction)
+ma0 = lmer(log(amp_acc) ~ visitNum_centered*trt2 +  hive +IT * treatment+ (1|beeID), data = newdf3, REML = FALSE)
+summary(ma0)
+
+ma1 = update(ma0, .~. - visitNum_centered:trt2)
+
+BIC(ma0, ma1) # interaction, ma1, is better
+
+# pval for interaction (in case paper needs it)
+anova(ma0, ma1)
+summary(ma1)
+
+ma2 <- update(ma1, .~. - trt2)
+BIC(ma1, ma2) # keep ma2
+summary(ma2)
+
+
+ma3 <- update(ma2, .~. - hive)
+anova(ma2, ma3) # keep ma3
+
+summary(ma3)
+
+ma3.1 <- update(ma3, .~. - visitNum_centered)
+anova(ma3, ma3.1) # keep 3.1
+summary(ma3.1)
+
+ma4 <- update(ma3.1, .~. - visitNum_centered )
+anova(ma3.1, ma4) #keep ma3.1
+summary(ma3.1)
+
+m3.2 <- update(ma3.1, .~ . + I(scale(visitNum_centered)) + I(scale(visitNum_centered^2)) + (1|beeID))
+summary(m3.2)
+
+anova(ma3.1, m3.2) # keep ma3.1 (according to BIC)
+
+
+
+finmod <- update(ma3.1, .~., REML = TRUE)
+summary(finmod)
+
+# finmod_centered <- update(ma3.1, .~. - IT*treatment + I(scale(IT, center = TRUE, scale = FALSE))*treatment, REML = TRUE)
+# summary(finmod_centered)
+
+
+# get p-value for interaction for paper
+pvalMod <- update(ma3.1, .~.  - IT:treatment)
+anova(ma3.1, pvalMod)
+
+
+
+# diagnostics
+plot(finmod)
+qqnorm(ranef(finmod)$beeID[[1]])
+qqline(ranef(finmod)$beeID[[1]])
+
+
+sjp.lmer(finmod) # plot random effects to find any outliers
+sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+```
+
+
+### Bootstrap CI's for amplitude for figure for paper
+
+```{r bootstrap_amp2, cache = TRUE}
+
+# set number of bootstrap replicates for models
+nbootSims2 = 10000
+
+# using hive 3, since it's the one with the most data
+pframe <- expand.grid(trt2 = levels(droplevels(newdf3$trt2)),
+                     IT = c(ITmean, seq(min(newdf3$IT), max(newdf3$IT), length.out = 50)),
+                     visitNum_centered = -50:50, 
+                     hive = factor(3, levels = levels(newdf3$hive)),  
+                     beeID = 99999, 
+                     treatment = levels(droplevels(newdf3$treatment)))
+pframe$amp_acc <- 0
+
+
+pframe2 <- pframe[(pframe$trt2 == "Sham first" &
+                    pframe$treatment == "Sham" & 
+                    pframe$visitNum_centered < 0) |
+                    (pframe$trt2 == "Sham first" &
+                    pframe$treatment == "Weighted" & 
+                    pframe$visitNum_centered > 0) |
+                    (pframe$trt2 == "Weighted first" &
+                    pframe$treatment == "Weighted" & 
+                    pframe$visitNum_centered < 0) |
+                    (pframe$trt2 == "Weighted first" &
+                    pframe$treatment == "Sham" & 
+                    pframe$visitNum_centered > 0) 
+                    , ]
+# exponentiate to put on original scale
+pp <- exp(predict(finmod, newdata = pframe2, re.form=NA, type = 'response')) # re.form sets all random effects to 0
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe2, re.form=NA, type = 'response'), nsim = nbootSims2)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe2$blo<- exp(bb2_se[1,]) # exponentiate to put on original scale
+pframe2$bhi<- exp(bb2_se[2,])
+pframe2$predMean <- pp
+pframe2
+
+### Plot amplitude lmer with trial number
+
+pframe2$trt3 <- mapvalues(pframe2$trt2, from = c("Sham first", "Weighted first"), 
+                          to = c("Sham -> Weighted", "Weighted -> Sham"))
+
+g0 <- ggplot(pframe2, aes(x=visitNum_centered, y=predMean))+
+     geom_line(aes(color = treatment))+ 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Sonication number\n (0 is when treatment switched)") + 
+     geom_ribbon(aes(x = visitNum_centered, ymin = blo, ymax = bhi, fill= treatment), alpha = 0.2) + 
+  facet_wrap(~trt3) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = c(0.5, 0.89), 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal")
+g0
+
+ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_amp.pdf"), width =5, height = 3.6)
+
+
+
+g1 <- g0 + geom_point(data = newdf3[newdf3$visitNum_centered < 50,],
+                aes(x = visitNum_centered, y = amp_acc), position = position_jitter(width = 0.5),  size = 0.1, pch = 16, alpha = 0.4) + 
+  ylim(c(0, 165)) 
+g1
+
+ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_withRawData.pdf"), width =5, height = 3.6)
+
+
+
+
+g1 <- g0 + geom_point(data = newdf3[newdf3$visitNum_centered < 50,],
+                aes(x = visitNum_centered, y = amp_acc), position = position_jitter(width = 0.5),  size = 0.1, pch = 16, alpha = 0.4) + 
+  scale_y_log10(limits = c(2, 500)) + 
+  annotation_logticks(sides = "l", color = 'grey', size = 0.2) 
+g1
+
+ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_withRawData_logScale.pdf"), width =5, height = 3.6)
+
+# make figure that isn't faceted by order of treatment
+
+g03 <- ggplot(pframe2, aes(x=visitNum_centered, y=predMean))+
+     geom_line(aes(color = treatment))+ 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Sonication number\n (0 is when treatment switched)") + 
+     geom_ribbon(aes(x = visitNum_centered, ymin = blo, ymax = bhi, fill= treatment), alpha = 0.2) + 
+  facet_wrap(~treatment) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = c(0.75, 0.8), 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="vertical")
+  
+g03
+
+ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_trtFacet.pdf"), width =5, height = 3.6)
+
+
+```
+
+
+### Show amplitude plot without visit number
+
+# look at visit number 1 (right at the time of switching)
+
+```{r}
+# mean and 95% CI (without visit number)
+
+g0_amp <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1) & pframe2$IT == ITmean, ], aes(x=treatment, y=predMean))+
+    geom_point(aes(color = treatment), alpha = 1) + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment") + 
+     geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, option = "A", begin =0, end = 0) + 
+  theme(legend.position = "none", 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") 
+g0_amp
+ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers_BW.pdf"), width =2.5, height = 3)
+
+
+
+g0 <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1) & pframe2$IT == ITmean, ], aes(x=treatment, y=predMean))+
+    geom_point(aes(color = treatment), alpha = 1) + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment") + 
+     geom_errorbar(aes(x = treatment, ymin = blo, ymax = bhi, color= treatment), alpha = 1, width = 0.1) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = "none", 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") 
+g0
+ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers.pdf"), width =5, height = 3.6)
+
+
+
+
+
+
+# fig 2b
+
+g0IT <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=IT, y=predMean))+
+    geom_line(aes(color = treatment), alpha = 1) + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Intertegular span (mm)") + 
+     geom_ribbon(aes(x = IT, ymin = blo, ymax = bhi, fill = treatment), alpha = 0.2) + 
+  scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  scale_fill_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
+  theme(legend.position = "top", 
+        legend.background = element_rect(fill=alpha('gray95', 1)), 
+        legend.direction="horizontal") 
+g0IT
+ggsave(g0IT, filename = file.path(figDir, "WeightedSham_Amp_IT_SUPP.pdf"), width =5, height = 3.6)
+
+# make plot with rug
+weight_rug <- g0IT + geom_rug(data = newdf3[!duplicated(newdf3$IT),], inherit.aes = FALSE, aes(x = IT))
+  
+weight_rug
+ggsave(weight_rug, filename = file.path(figDir, "WeightedSham_Amp_IT_SUPP_rug.pdf"), width =5, height = 3.6)
+
+Fig2b <- weight_rug
+
+
+
+ITmean
+
+g22 <- g0 + 
+  annotate(geom="text", x=c(1,2), y=c(0, 0) + 40, label=c("a", "b"),
+                color="black")
+ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers_annot.pdf"), width =5, height = 3.6)
+
+## add raw data
+g1 <- g0 + geom_point(data = newdf3, aes(x = treatment, y = amp_acc, color = treatment), position = position_jitter(width = 0.1, height = 6), alpha = 0.4, pch = 16, size = 0.2)
+g1
+
+ggsave(filename = file.path(figDir, "WeightedSham_amp_pointWhiskers_rawData.pdf"), width =5, height = 3.6)
+
+```
+
+
+### Investigate positional amplitude and also compare amplitude from fft 
+
+```{r}
+am1 = lmer(log(acc_amplitude_fft_m.s.s) ~ IT + treatment + (1 | beeID) + IT:treatment, data = new_df)
+summary(am1)
+
+am2 = update(am1, .~. - IT:treatment)
+
+anova(am1, am2) # BIC says go with smaller model
+summary(am2)
+
+
+
+amp1 = lmer(log(pos_amplitude_fft_m) ~ IT +treatment + (1 | beeID) , data = new_df)
+summary(amp1)
+plot(amp1)
+
+ggplot(new_df, aes(x = treatment, y = log(pos_amplitude_fft_m)))+ 
+  geom_boxplot()
+
+
+
+ggplot(new_df, aes(x = treatment, y = log(amp_acc)))+ 
+  geom_boxplot()
+
+
+ggplot(new_df, aes(x = treatment, y = log(pos_amplitude_fft_m)))+ 
+  geom_boxplot()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# major break -- below this line is the first method I used
+
+
+# this is almost identical to the code above
+
+
+
+### Modeling frequency with lmer
+
+Use BIC to select model (decide what interactions and covariates to use)
+
+Make sure that REML = FALSE when comparing BIC values
+
+Start with the biggest model of interest, and then see what predictors can be removed
+
+```{r modeling3}
+
+# interaction that may be important, based on domain knowledge
+m0 = lmer(freq ~ treatment*IT+  hive + (1|beeID), data = new_df, REML = FALSE)
+
+# no interaction
+m1 = lmer(freq ~ treatment+IT+  hive + (1|beeID), data = new_df, REML = FALSE)
+BIC(m0, m1) # stay with m1 -- no interaction
+anova(m0, m1) # this p-value is very borderline -- we're being 
+# conservative to avoid overfitting by using BIC
+
+m2 = lmer(freq ~ hive + IT+ (1|beeID), data = new_df, REML = FALSE)
+BIC(m1, m2) # treatment doesn't make the model better
+
+anova(m1, m2) # p-value for paper -- probably don't need to report
+
+# p-value for hive
+m3 = lmer(freq ~ treatment + (1|beeID), data = new_df, REML = FALSE)
+anova(m1, m3)
+
+
+# diagnostics -- use REML = TRUE
+m1 <- update(m1, .~., REML =TRUE)
+summary(m1) # summary for paper
+plot(m1)
+qqnorm(ranef(m1)$beeID[[1]])
+qqline(ranef(m1)$beeID[[1]])
+
+sjp.lmer(m1, type = "re", sort = TRUE) # plot random effects to find any outliers
+sjp.lmer(m1, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+```
+
+
+### Bootstrap CI's for figure for paper
+
+```{r bootstrap3, cache = TRUE}
+# set number of bootstrap replicates for models
+nbootSims = 1000
+
+table(new_df$hive) # more trials from hive 3
+
+# using hive 3, since it's the one with the most data
+# however, hive doesn't affect model anyway
+
+# calculate an average IT for prediction
+ITmean = mean(tapply(new_df$IT, INDEX = new_df$beeID, FUN = function(x) x[1] ))
+
+pframe <- data.frame(treatment = levels(droplevels(new_df$treatment)),
+                     IT = ITmean, 
+                     hive = factor(3, levels = levels(new_df$hive)),  
+                     beeID = 99999)
+pframe$freq <- 0
+pp <- predict(m1, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(m1, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<-bb2_se[1,]
+pframe$bhi<-bb2_se[2,]
+pframe$predMean <- pp
+pframe <- pframe[, c('treatment', "blo", "bhi", "predMean")]
+pframe
+```
+
+### Make frequency plots for paper
+
+```{r figure-making}
+# "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
+g0 <- ggplot(pframe, aes(x=treatment, y=predMean))+
+     geom_point()+ 
+     labs(y = "Sonication frequency (Hz)", x = "Flower treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)
+g0
+ggsave(plot = g0, filename = file.path(figDir, "HeavyLight_PredsAndCI_freq.pdf"), width =4, height = 3)
+```
+
+
+### Modeling amplitude with lmer
+
+```{r modeling-amp2}
+# log transform for acceleration helps model fit better
+# start with large model (including interaction)
+ma0 = lmer(log(amp_acc) ~ treatment * IT +  hive + (1|beeID), data = new_df, REML = FALSE)
+
+ma1 = lmer(log(amp_acc) ~ treatment + IT +  hive + (1|beeID), data = new_df, REML = FALSE)
+
+BIC(ma0, ma1) # interaction, ma0, is better
+
+# pval for interaction (in case paper needs it)
+anova(ma0, ma1)
+
+ma2 <- update(ma0, .~. - hive)
+BIC(ma0, ma2) # hive not important
+
+#pval for hive
+anova(ma0, ma2)
+
+# fit with reml = TRUE for summarizing
+ma3 <- update(ma2,.~., REML = TRUE)
+summary(ma3) # final model to report
+
+# diagnostics
+plot(ma3)
+qqnorm(ranef(ma3)$beeID[[1]])
+qqline(ranef(ma3)$beeID[[1]])
+
+
+sjp.lmer(ma3) # plot random effects to find any outliers
+sjp.lmer(ma3, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+```
+
+
+### Bootstrap CI's for amplitude for figure for paper
+
+```{r bootstrap_amp3, cache = TRUE}
+
+# set number of bootstrap replicates for models
+nbootSims2 = 1000
+
+# using hive 3, since it's the one with the most data
+pframe <- data.frame(treatment = levels(droplevels(new_df$treatment)), IT = ITmean, hive = factor(3, levels = levels(new_df$hive)),  beeID = 99999)
+pframe$amp_acc <- 0
+# exponentiate to put on original scale
+pp <- exp(predict(ma3, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(ma3, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<- exp(bb2_se[1,]) # exponentiate to put on original scale
+pframe$bhi<- exp(bb2_se[2,])
+pframe$predMean <- pp
+pframe <- pframe[, c('treatment', "blo", "bhi", "predMean")]
+pframe
+```
+
+### Make amplitude plots for paper
+
+```{r figure-making-amp}
+# "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
+# Holding IT = meanIT
+print(ITmean)
+ga0 <- ggplot(pframe, aes(x=treatment, y=predMean))+
+     geom_point()+ 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Flower treatment") + 
+     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) +
+  annotate(geom="text", x=c(1,2), y=c(0, 0) + 40, label=c("a", "b"),
+                color="black") 
+ga0
+ggsave(plot = ga0, filename = file.path(figDir, "HeavyLight_PredsAndCI_amp.pdf"), width =4, height = 3)
+```
+
+
+
+
+### Put two plots into a single figure
+
+```{r}
+
+# refref: note I might want to align these two figure for paper (in one plot)
+# WeightedSham_Amp_pointWhiskers_BW.pdf
+# WeightedSham_Freq_pointWhiskers_BW.pdf
+
+pfreq <- Fig2a
+
+pamp <- Fig2b + theme(legend.position = c(.5,.85)) + ylim(c(10/2,55/2))
+
+  
+
+aa <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2))
+
+ggdraw(aa)
+
+ac <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2), labels = "AUTO")
+ggdraw(ac)
+
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab_IT.pdf"), plot = aa, base_width = 7, base_height = 3)
+
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot_IT.pdf"), plot = ac, base_width = 7, base_height = 3)
+
+```
+
+
+```{r}
+sessionInfo()
+````
+
