@@ -50,6 +50,12 @@ print(R.version)
 ```{r}
 sl <- read.csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
 
+
+# calculate proportion of rewards by trt
+prop.table(xtabs(~ sl$rewTF + sl$trt), margin = 2)
+xtabs(~ sl$rewTF + sl$trt)
+
+
 # make sure hive is a factor
 sl$hive = as.factor(sl$hive)
 unique(sl$hive)
