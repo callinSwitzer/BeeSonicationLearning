@@ -12,6 +12,8 @@ editor_options:
 ## Multilevel model to visualize bees'
 ## behavior on the artificial pollen system
 
+## Update 30 July 2018
+
 </pre>
 
 
