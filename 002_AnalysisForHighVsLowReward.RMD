@@ -32,15 +32,24 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects", "viridis")
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', 
+              "multcomp", "plyr", "effects")
 ipak(packages)
 
 # set ggplot theme
 theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
 
 # define data and figure directories
-dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
-figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+# mac
+#dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+#figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+
+# windows
+dataDir <- "D:/Dropbox/SonicationBehavior/SonBehData"
+figDir <- "D:/Dropbox/SonicationBehavior/SonBehFigs"
+
+# check if the directory exists
+file.info(dataDir)$isdir
 
 print(paste("last run ", Sys.time()))
 print(R.version)
@@ -169,9 +178,11 @@ ggplot(d7, aes(x = variable, y = buzzFreq)) +
   geom_boxplot(aes(fill = variable == "full"), alpha = 0.2) + 
   geom_point(aes(color = variable == "full", size = NumBuzzes)) + 
   geom_line(aes(group = beeCol), alpha = 0.2) + 
-  scale_fill_viridis(name = "hihi", guide = FALSE, discrete = TRUE, option = "A", end = 0.6) + 
-  scale_color_viridis(name = "hihi", guide = FALSE, discrete = TRUE, option = "A", end = 0.6) + 
+  scale_fill_viridis_d(name = "hihi", guide = FALSE, option = "A", end = 0.6) + 
+  scale_color_viridis_d(name = "hihi", guide = FALSE, option = "A", end = 0.6) + 
   labs(x = "treatment")
+
+
 
 ```
 
@@ -347,7 +358,7 @@ summary(glht(m3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
 ```{r bootstrap, cache = TRUE}
 
 # set number of bOotstrap samples
-nbootSims = 1000
+nbootSims = 10
 
 ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
 print(ITmean)
@@ -489,7 +500,7 @@ summary(glht(maa3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
 
 ```{r bootstrapAmp, cache = TRUE}
 # set number of bootstrap samples
-nbootSims2 = 1000
+nbootSims2 = 10
 
 # don't need to include hive, but will set trialNum to 2
 pframe <- data.frame(trt2 = levels(droplevels(sl$trt2)), 
@@ -678,6 +689,190 @@ g22 <- ggplot(ppdf, aes(x = cf_Unscaled, y = predAmp))+
 g22
 ggsave(filename = file.path(figDir, "FreqVsAmp_1stTrial.pdf"), width = 4, height = 3)
   
+```
+
+
+## analyze time between buzzes
+```{r}
+# convert time to datetime format
+options(digits.secs=6)
+sl$dateTime_fmt= strptime(x = sl$datetime_str, format = "%Y-%m-%d  %H:%M:%OS" )
+
+sl %>% head
+
+# calculate time since beginning of trial
+timeSinceStart = list()
+timeDiff = list()
+timeSinceReward = list()
+IDS = character()
+prevRewardTime = NA
+buzzesSinceReward = list()
+
+# calculate num of buzzes since last reward
+
+
+for(ii in 1:nrow(sl)){
+  
+  tmp = sl[ii, c("BeeNumCol", "dateTime_fmt", "rewTF", "index")]
+  
+  if(!(tmp$BeeNumCol %in% IDS)){
+    timeSinceStart[ii] = difftime(tmp$dateTime_fmt, tmp$dateTime_fmt, units = "min")
+    timeDiff[ii] = difftime(tmp$dateTime_fmt, tmp$dateTime_fmt, units = "min")
+    timeSinceReward[ii] = difftime(tmp$dateTime_fmt, tmp$dateTime_fmt, units = "min")
+    buzzesSinceReward[ii] = NA
+    if(as.character(tmp$rewTF) == " T"){
+      prevRewardTime = tmp$dateTime_fmt
+      prevRewardBuzzNum = tmp$index
+    }
+    else{
+       prevRewardTime = NA
+       prevRewardBuzzNum = NA
+    }
+    startTime = tmp$dateTime_fmt
+    IDS = append(IDS, as.character(tmp$BeeNumCol))
+  }
+  else{
+    timeSinceStart[ii] = difftime(tmp$dateTime_fmt, startTime, units = "min")
+    timeDiff[ii] = difftime(tmp$dateTime_fmt, prevTime, units = "min")
+    
+    timeSinceReward[ii] = difftime(tmp$dateTime_fmt, prevRewardTime, units = "min")
+    buzzesSinceReward[ii] = tmp$index - prevRewardBuzzNum
+    if(tmp$rewTF == " T"){
+      prevRewardTime = tmp$dateTime_fmt
+      prevRewardBuzzNum = tmp$index
+    }
+  }
+  prevTime = tmp$dateTime_fmt
+
+}
+
+
+sl$timeSinceStart = unlist(timeSinceStart)
+sl$timeSinceLastBuzz = unlist(timeDiff)
+sl$timeSinceReward = unlist(timeSinceReward)
+sl$buzzesSinceReward = unlist(buzzesSinceReward)
+
+#plot(sl$index)
+sl %>% head
+
+plot(sl$timeSinceStart[1:500])
+plot(sl$timeSinceLastBuzz[1:1000])
+
+plot(sl$buzzesSinceReward[1:5000])
+
+ggplot(data = sl[1:10000, ], mapping = aes(x = index, y = timeSinceReward, color= trt)) + 
+# geom_boxplot() + 
+   geom_point() + 
+  facet_wrap(~trt) + 
+  scale_y_log10() + 
+  theme(legend.position = "none") + 
+  geom_smooth(color = 'grey40') + 
+  scale_color_viridis_d(option = "magma", end = 0.9)
+
+ggplot(data = sl[1:10000, ], mapping = aes(x = index, y = timeSinceReward, color= trt)) + 
+# geom_boxplot() + 
+   geom_point() + 
+  facet_wrap(~trt) + 
+  scale_y_log10() + 
+  theme(legend.position = "none") + 
+  geom_smooth(color = 'grey40') + 
+  scale_color_viridis_d(option = "magma", end = 0.9)
+
+
+
+# plot time vs. reward 
+
+ggplot(data = sl[1000:2000, ], mapping = aes(x = timeSinceStart, y = timeSinceReward, color= trt)) + 
+# geom_boxplot() + 
+   geom_point(alpha = 0.5) + 
+  geom_line() + 
+  facet_wrap(~BeeNumCol, scales = 'free') + 
+  ylim(-0.1, 1.1) + 
+  #geom_smooth() + 
+  #theme(legend.position = "none") + 
+  scale_color_viridis_d(option = "magma", end = 0.9, begin = 0.2,direction = -1)
+
+# plot buzzes b/w rewards
+ggplot(data = sl[grepl(pattern = "t", ignore.case = TRUE, x = sl$rewTF) & !(sl$trt %in% c("full", "full_2")), ][1:5000,], mapping = aes(x = index, y = buzzesSinceReward, color= trt)) + 
+# geom_boxplot() + 
+   geom_point(alpha = 0.5) + 
+  geom_line() + 
+  facet_wrap(~BeeNumCol, scales = 'free_x') + 
+  #ylim(-0.1, 1.1) + 
+  #geom_smooth() + 
+  #theme(legend.position = "none") + 
+  scale_color_viridis_d(option = "magma", end = 0.9, begin = 0.2,direction = -1)
+
+
+
+
+unique(sl[1000:5000, ]$BeeNumCol)
+
+View(sl[sl$BeeNumCol == "Beelimered11_16Dec2016_Hive5_low", ])
+View(sl[grepl(pattern = "redpink1", x = as.character(sl$BeeNumCol)), ])
+ggplot(data = sl[sl$BeeNumCol == "Beelimered11_16Dec2016_Hive5_low", ], mapping = aes(x = index, y = buzzesSinceReward, color= trt)) + 
+# geom_boxplot() + 
+   geom_point(alpha = 0.5) + 
+  geom_line() + 
+  facet_wrap(~BeeNumCol, scales = 'free') + 
+  #ylim(-0.1, 1.1) + 
+  #geom_smooth() + 
+  #theme(legend.position = "none") + 
+  scale_color_viridis_d(option = "magma", end = 0.9, begin = 0.2,direction = -1)
+
+
+ggplot(data = sl[grepl(pattern = "redpink", x = as.character(sl$BeeNumCol)), ], mapping = aes(x = index, y = buzzesSinceReward, color= trt)) + 
+# geom_boxplot() + 
+   geom_point(alpha = 0.5) + 
+  geom_line() + 
+  facet_wrap(~BeeNumCol, scales = 'free') + 
+  #ylim(-0.1, 1.1) + 
+  #geom_smooth() + 
+  #theme(legend.position = "none") + 
+  scale_color_viridis_d(option = "magma", end = 0.9, begin = 0.2,direction = -1)
+
+ggplot(sl[, ], aes(x = index, y = grepl("t", x = rewTF, ignore.case = TRUE)*1)) +
+   geom_point() + 
+  geom_smooth() + 
+facet_wrap(~trt, scales = 'free')
+
+binomial_smooth <- function(...){
+  geom_smooth(method = "glm", method.args = list(family = "binomial"), ...)
+}
+
+
+ggplot(sl[, ], aes(x = timeSinceStart, y = grepl("t", x = rewTF, ignore.case = TRUE)*1)) +
+   geom_point() + 
+  binomial_smooth() +  
+facet_wrap(~trt, scales = 'free')
+
+ggplot(sl[sl$trt2 %in% c("low", "high"), ], aes(x = index, y = grepl("t", x = rewTF, ignore.case = TRUE)*1)) +
+   geom_point() + 
+  binomial_smooth(aes(color = as.factor(trialNum)), se = FALSE) +  
+facet_wrap(~interaction(beeCol , hive, trt), scales = 'free') + 
+  scale_color_viridis_d(end = 0.9, option = "magma", direction = -1)
+
+# refref: visualize using overall buzz number (not reset for each trial), but still
+# color by trial
+
+sum(as.character(sl$trt) == as.character(sl$trt2))
+
+
+# calculate time differences b/w rewards
+
+
+
+
+```
+
+
+### analyze the change in num of buzzes b/w rewards to see if they decrease over time
+
+```{r}
+
+
+
+
 ```
 
 ```{r}
