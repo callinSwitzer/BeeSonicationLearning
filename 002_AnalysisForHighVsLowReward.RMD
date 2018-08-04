@@ -12,7 +12,7 @@ editor_options:
 ## Multilevel model to visualize bees'
 ## behavior on the artificial pollen system
 
-## Update 30 July 2018
+## Update 30 July 2018 -- investigate proportion of time rewarded
 
 </pre>
 
@@ -20,7 +20,9 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationBehavior")
+rd = "D:/Dropbox/SonicationBehavior"
+# "/Users/cswitzer/Dropbox/SonicationBehavior"
+knitr::opts_knit$set(root.dir =rd )
 ```
 
 
@@ -32,7 +34,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', 
+packages <- c("tidyverse", "reshape2", 'lme4', 'sjPlot', 
               "multcomp", "plyr", "effects")
 ipak(packages)
 
@@ -60,6 +62,7 @@ print(R.version)
 
 ```{r}
 sl <- read.csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
+colnames(sl)
 
 
 # calculate proportion of rewards by trt
@@ -855,13 +858,129 @@ facet_wrap(~interaction(beeCol , hive, trt), scales = 'free') +
 # refref: visualize using overall buzz number (not reset for each trial), but still
 # color by trial
 
-sum(as.character(sl$trt) == as.character(sl$trt2))
+IDS = character()
+sl <- sl[order(sl$dateTime_fmt), ]
+ID1 = interaction(sl$beeCol, sl$hive, sl$trt2)
+buzzctr = 0
+overallBuzz = numeric(length = nrow(sl))
+for(ii in 1:nrow(sl)){
+    tmp = ID1[ii]
+    if(tmp %in% IDS){
+      buzzctr =  max(overallBuzz[ID1 == tmp]) + 1
+    }
+    else{
+      buzzctr = 0
+      IDS = append(IDS, as.character(tmp))
+    }
+    overallBuzz[ii] = buzzctr
+    print(ii)
+}
+sl$overallBuzz = overallBuzz
+    
+ggplot(sl[sl$trt2 != "full", ], aes(x = overallBuzz, 
+                   y = grepl("t", x = rewTF, ignore.case = TRUE)*1, 
+                   color = interaction(beeCol, hive, trt2, trialNum))) +
+   geom_point() + 
+  geom_smooth(se = FALSE) +  
+  theme(legend.position = "none") + 
+facet_wrap(~interaction(beeCol, hive, trt2), scales = 'free')
 
 
-# calculate time differences b/w rewards
+
+
+ggplot(sl[sl$trt2 != "full", ], aes(x = overallBuzz, 
+                   y = freq, 
+                   color = grepl("t", x = rewTF, ignore.case = TRUE))) +
+   geom_point() + 
+  stat_smooth(method = "loess", se = FALSE, color = "grey40", span = 0.9, lwd= 5) +  
+  #theme(legend.position = "none") + 
+facet_wrap(~interaction(beeCol, hive, trt2), scales = 'free') + 
+  scale_color_viridis_d(name = "Reward")
+
+
+ggplot(sl[sl$trt2 != "full", ], aes(x = overallBuzz, 
+                   y = freq)) +
+  geom_ribbon(aes(ymin=lowFrq,ymax=highFrq), fill="grey10", alpha= 0.9, color = NA) +
+   geom_hex(binwidth = c(150, 10)) + 
+  
+  #theme(legend.position = "none") + 
+facet_wrap(interaction(beeCol, hive, trt2)~., ncol = 6) + 
+  scale_fill_viridis_c(name = "Num buzzes") + 
+  geom_hline(aes(yintercept = lowFrq), color = 'grey40', size = 1, lty = 2) + 
+  geom_hline(aes(yintercept = highFrq), color = 'grey40', size = 1, lty = 2) 
+  
+
+
+# refref calculate time differences b/w rewards
+ggplot(sl[grepl(pattern = "t", x = as.character(sl$rewTF), ignore.case = TRUE) & sl$trt != "full", ], aes(x = as.factor(trialNum), y = timeSinceReward)) + 
+         geom_point(aes(color= as.factor(trialNum))) + 
+  facet_wrap(interaction(beeCol, hive, trt2)~., ncol = 6, scales = 'free_x') +
+  ylim(c(0,1))
+
+
+# num buzzes b/w rewards
+ggplot(sl[grepl(pattern = "t", x = as.character(sl$rewTF), ignore.case = TRUE) & sl$trt2 != "full", ], aes(x = overallBuzz, y = buzzesSinceReward)) + 
+         geom_point() + 
+  facet_wrap(interaction(beeCol, hive, trt2)~., ncol = 6)
+
+
+# num buzzes b/w rewards
+ggplot(sl[grepl(pattern = "t", x = as.character(sl$rewTF), ignore.case = TRUE) & sl$trt2 != "full", ], aes(x = interaction(index < 50, as.factor(trialNum)), y = buzzesSinceReward, fill = index < 50)) + 
+         geom_boxplot() + 
+  
+  theme(axis.text.x = element_text(angle = 90)) + 
+  facet_wrap(interaction(beeCol, hive, trt2)~., ncol = 6, scales = 'free_x') + 
+  scale_color_viridis_d()
+
+
+#refref: calculate continuous time for each bee
+sl$continuousTime = 0
+sl$beeID = interaction(sl$beeCol, sl$hive)
+jj = "orange.3"
+kk = 1
+for(jj in unique(sl$beeID)){
+  tmp = sl[sl$beeID == jj, ]
+  tmp %>% head()
+  # sort
+  tmp <- tmp[order(tmp$dateTime_fmt), ]
+  
+  times = numeric()
+  trials = numeric()
+  kk = 1
+  for(kk in 1:nrow(tmp)){
+    if(!(tmp$trialNum[kk] %in% trials)){
+      trials <<- append(trials, tmp$trialNum[kk])
+        if(kk == 1){
+        times[kk] = 0
+        }
+      else{
+        times[kk-1] = max(times)
+      }
+      
+    }
+    if(kk == 1){
+        times[kk] = 0
+        }
+    else{
+      times[kk] =  tmp$timeSinceLastBuzz[kk] + times[kk -1]
+    }
+  }
+  tmp$continuousTime = times
+  #plot(times)
+  sl <- merge(sl, tmp, all = TRUE)
+  
+}
 
 
 
+
+# proportion of rewarded buzzes over time
+ggplot(sl, aes(x = timeSinceStart, y = grepl("t", x = rewTF, ignore.case = TRUE)* 1)) + 
+  geom_point() + 
+  theme(legend.position = "none") + 
+  stat_smooth(method = "loess", aes(color = interaction(beeCol, hive, trt2, trialNum)), se = FALSE) + 
+  facet_wrap(interaction(beeCol, hive, trt2)~., ncol = 6, scales = 'free_x') + 
+  scale_color_viridis_d() + ylim(c(0, 1))
 
 ```
 
