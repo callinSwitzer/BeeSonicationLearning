@@ -71,10 +71,12 @@ for(ii in 1:(nrow(sl) - 1)){
 sl <- sl %>%
   transform(OverallTime = ave(timeDiff, interaction(beeColHive), FUN=function(x) cumsum(coalesce(x, 0)) + x*0)) %>%
   mutate(continuousCount = ave(beeColHive==beeColHive,beeColHive, FUN=cumsum), 
-        rewardTF = grepl("t", tolower(rewTF)))
+        rewardTF = grepl("t", tolower(rewTF))) %>%
+  mutate(OverallTime_sep = OverallTime + 100*trialNum)
 
 
-View(sl)
+
+# View(sl)
 
 ```
 
@@ -102,7 +104,7 @@ ggsave(filename = file.path(figDir, "buzzesByNumber.pdf"), width = 100, height =
 
 sl %>%
   filter(trt != "full") %>%
-ggplot( aes(x = OverallTime, y = rewardTF*1)) + 
+ggplot( aes(x = OverallTimep, y = rewardTF*1)) + 
   geom_point() + 
   facet_wrap(~interaction(beeColHive, trt)) + 
   stat_smooth(method = 'loess', aes(color = as.factor(trialNum)), se = FALSE, span = 5) + 
@@ -140,13 +142,24 @@ ggplot(newDF2, aes(x=continuousCount,fill=rewardTF)) +
 ggsave(filename = file.path(figDir, "buzzesOverBuzzCount_hist.pdf"), width = 20, height = 10, limitsize = FALSE)
 
 
+
+
+
 newDF2 <- sl %>%
   filter(trt != "full")
+
+timeCutoff <- newDF2 %>%
+  subset(is.na(newDF2$timeDiff)) %>%
+  rownames() %>%
+  as.numeric()
+
 ggplot(newDF2, aes(x=OverallTime,fill=rewardTF)) + 
+  geom_vline( data = newDF2[timeCutoff - 1, ], aes(xintercept = OverallTime)) + 
+  geom_vline( data = newDF2[timeCutoff +1, ], aes(xintercept = OverallTime)) + 
   geom_histogram(data=subset(newDF2,rewardTF==TRUE), aes(y = ..count..),color = 'grey10', lwd = 0.1, binwidth = 200) +
   geom_histogram(data=subset(newDF2,rewardTF==FALSE),aes( y=..count..*(-1)), color = 'grey10', lwd = 0.1, binwidth = 200 ) + 
   scale_y_continuous(breaks=seq(-200,200,20),labels=abs(seq(-200,200,20))) + 
-  facet_wrap(~interaction(beeColHive, trt), ncol = 6) +
+  facet_wrap(trt ~ beeColHive, ncol = 6) +
   theme_classic() + 
   theme(legend.position = c(0.8,0.1) , 
         axis.text.x = element_text(angle = 90, size = 7), 
@@ -156,12 +169,44 @@ ggplot(newDF2, aes(x=OverallTime,fill=rewardTF)) +
             lwd = 4, pch = 15)+ 
   scale_color_viridis_d(direction = 1, option = "plasma",  name = "Trial Num") + 
   xlab("Time (s)") + 
-  ylab("Frequency")
+  ylab("Frequency") 
 
 ggsave(filename = file.path(figDir, "buzzesOverTime_hist.pdf"), width = 20, height = 10, limitsize = FALSE)
 
 
 
+
+newDF2 <- sl %>%
+  filter(trt != "full")
+
+textSize = 3
+
+paste(with(newDF2, as.character(unique(interaction(beeColHive, trt)))), collapse = "\', \'")
+newDF2$facet_labels = with(newDF2,gsub(x = paste0(interaction(trt,  formatC(as.numeric(as.factor(beeColHive)), width = 2, flag = 0))), pattern = "\\.",replacement = " freq reward, bee "))
+
+with(newDF2, formatC(as.numeric(as.factor(beeColHive)), width = 2, flag = 0))
+
+ann_text <- data.frame(OverallTime_sep = 6000, lab = "Reward", facet_labels = factor(c("high freq reward, bee 03", "low freq reward, bee 01"), levels = levels(as.factor(newDF2$facet_labels))))
+
+ggplot(newDF2, aes(x=OverallTime_sep,fill=rewardTF, group = as.factor(trialNum))) + 
+  geom_histogram(data=subset(newDF2,rewardTF==TRUE), aes(y = ..count..),color = 'grey10', lwd = 0.1, binwidth = 50) +
+  geom_histogram(data=subset(newDF2,rewardTF==FALSE),aes( y=..count..*(-1)), color = 'grey10', lwd = 0.1, binwidth = 50 ) + 
+  scale_y_continuous(breaks=seq(-60,40,10),labels=abs(seq(-60,40,10))) + 
+  facet_wrap(~facet_labels, ncol = 6) +
+  theme_classic() + 
+  theme(legend.position = c(0.7,0.1) , 
+        axis.text.x = element_text(angle = 0, size = 8), 
+        legend.direction = "horizontal")+ 
+  scale_fill_viridis_d(direction = 1, option = "cividis", name = "Rewarded", end = 0.9, begin = 0.3) + 
+  geom_line(data = newDF2, inherit.aes = FALSE, aes(x = OverallTime_sep,  y = -50, color = factor(trialNum)),
+            lwd = 400, show.legend = FALSE, alpha = 0.1)+ 
+  scale_color_viridis_d(direction = 1, option = "plasma",  name = "Trial Num") + 
+  xlab("Time (s)") + 
+  ylab("Frequency of visits")  + 
+  geom_text(inherit.aes = FALSE, data = ann_text, aes(x = OverallTime_sep, label = "Rewarded", y = 5), size = textSize) + 
+  geom_text(inherit.aes = FALSE, data = ann_text, aes(x = OverallTime_sep, label = "Unrewarded", y = -5), size = textSize)
+
+ggsave(filename = file.path(figDir, "buzzesOverTime_hist_TimeSep.pdf"), width = 11.5, height = 8, limitsize = FALSE)
 
 ggplot(newDF2, aes(x=OverallTime,fill=rewardTF)) + 
   geom_density(data=subset(newDF2,rewardTF==TRUE), aes(y = ..count..),color = 'grey10', lwd = 0.1, n = 256) +
