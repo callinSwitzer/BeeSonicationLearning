@@ -1,0 +1,186 @@
+---
+title: "002_1_AnalysisHighLowTime.RMD"
+author: "Callin Switzer"
+date: "August 6, 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rd = "D:/Dropbox/SonicationBehavior"
+# "/Users/cswitzer/Dropbox/SonicationBehavior"
+knitr::opts_knit$set(root.dir =rd )
+```
+
+```{r, warning = FALSE}
+#install packages
+ipak <- function(pkg){
+     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+     if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+     sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("tidyverse", "reshape2", 'lme4', 'sjPlot', 
+              "multcomp", "plyr", "effects", "lubridate")
+ipak(packages)
+
+# set ggplot theme
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
+
+# define data and figure directories
+# mac
+#dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+#figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+
+# windows
+dataDir <- "D:/Dropbox/SonicationBehavior/SonBehData"
+figDir <- "D:/Dropbox/SonicationBehavior/SonBehFigs"
+
+# check if the directory exists
+file.info(dataDir)$isdir
+
+print(paste("last run ", Sys.time()))
+print(R.version)
+
+```
+
+### Read in data and add columns
+
+```{r}
+sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
+colnames(sl)
+
+options(digits.secs=6)
+sl <- sl %>% 
+  mutate(dateTime_fmt =  as.POSIXct(as.character(datetime_str), 
+                                    format = "%Y-%m-%d  %H:%M:%OS"), 
+         beeColHive = as.character(interaction(beeCol, hive))) %>%
+  arrange(beeColHive,trialNum, dateTime_fmt) %>% 
+  group_by(beeColHive, trialNum) %>%
+  mutate(timeDiff = as.numeric(difftime(dateTime_fmt, lag(dateTime_fmt), units = "sec"))) 
+
+# add NA for time diff whenever a new trial starts
+for(ii in 1:(nrow(sl) - 1)){
+  if(sl$BeeNumCol[ii + 1] != sl$BeeNumCol[ii]){
+    sl$timeDiff[ii + 1] <- NA
+  }
+}
+
+sl <- sl %>%
+  transform(OverallTime = ave(timeDiff, interaction(beeColHive), FUN=function(x) cumsum(coalesce(x, 0)) + x*0)) %>%
+  mutate(continuousCount = ave(beeColHive==beeColHive,beeColHive, FUN=cumsum), 
+        rewardTF = grepl("t", tolower(rewTF)))
+
+
+View(sl)
+
+```
+
+
+
+
+```{r}
+# plot buzz times vs rewards
+
+ggplot(sl, aes(x = continuousCount, fill = rewardTF)) + 
+  geom_histogram()
+
+
+sl %>%
+  filter(trt != "full") %>%
+ggplot( aes(x = continuousCount, y = rewardTF*1)) + 
+  geom_point() + 
+  facet_wrap(~interaction(beeColHive, trt)) + 
+  stat_smooth(method = 'loess', aes(color = as.factor(trialNum)), se = FALSE, span = 5) + 
+  scale_color_viridis_d()
+ggsave(filename = file.path(figDir, "buzzesByNumber.pdf"), width = 100, height = 10, limitsize = FALSE)
+
+
+
+
+sl %>%
+  filter(trt != "full") %>%
+ggplot( aes(x = OverallTime, y = rewardTF*1)) + 
+  geom_point() + 
+  facet_wrap(~interaction(beeColHive, trt)) + 
+  stat_smooth(method = 'loess', aes(color = as.factor(trialNum)), se = FALSE, span = 5) + 
+  scale_color_viridis_d()
+ggsave(filename = file.path(figDir, "buzzesOverTime.pdf"), width = 100, height = 10, limitsize = FALSE)
+
+
+sl %>%
+  filter(trt != "full") %>%
+ggplot( aes(x = OverallTime, fill = rewardTF)) + 
+  geom_histogram() + 
+  facet_wrap(~interaction(beeColHive, trt)) +
+  scale_fill_viridis_d()
+
+
+
+newDF2 <- sl %>%
+  filter(trt != "full")
+ggplot(newDF2, aes(x=continuousCount,fill=rewardTF)) + 
+  geom_histogram(data=subset(newDF2,rewardTF==TRUE), aes(y = ..count..),color = 'grey10', lwd = 0.1, binwidth = 100) +
+  geom_histogram(data=subset(newDF2,rewardTF==FALSE),aes( y=..count..*(-1)), color = 'grey10', lwd = 0.1, binwidth = 100 ) + 
+  scale_y_continuous(breaks=seq(-200,200,20),labels=abs(seq(-200,200,20))) + 
+  facet_wrap(~interaction(beeColHive, trt), ncol = 6) +
+  theme_classic() + 
+  theme(legend.position = c(0.8,0.1) , 
+        axis.text.x = element_text(angle = 90, size = 7), 
+        legend.direction = "horizontal")+ 
+  scale_fill_viridis_d(direction = 1, option = "cividis", name = "Rewarded", end = 0.9, begin = 0.3) + 
+  geom_point(data = newDF2, inherit.aes = FALSE, aes(x = continuousCount,  y = -100, color = factor(trialNum)),
+            lwd = 4, pch = 15)+ 
+  scale_color_viridis_d(direction = 1, option = "plasma",  name = "Trial Num") + 
+  xlab("Sonication Number") + 
+  ylab("Frequency")
+
+ggsave(filename = file.path(figDir, "buzzesOverBuzzCount_hist.pdf"), width = 20, height = 10, limitsize = FALSE)
+
+
+newDF2 <- sl %>%
+  filter(trt != "full")
+ggplot(newDF2, aes(x=OverallTime,fill=rewardTF)) + 
+  geom_histogram(data=subset(newDF2,rewardTF==TRUE), aes(y = ..count..),color = 'grey10', lwd = 0.1, binwidth = 200) +
+  geom_histogram(data=subset(newDF2,rewardTF==FALSE),aes( y=..count..*(-1)), color = 'grey10', lwd = 0.1, binwidth = 200 ) + 
+  scale_y_continuous(breaks=seq(-200,200,20),labels=abs(seq(-200,200,20))) + 
+  facet_wrap(~interaction(beeColHive, trt), ncol = 6) +
+  theme_classic() + 
+  theme(legend.position = c(0.8,0.1) , 
+        axis.text.x = element_text(angle = 90, size = 7), 
+        legend.direction = "horizontal")+ 
+  scale_fill_viridis_d(direction = 1, option = "cividis", name = "Rewarded", end = 0.9, begin = 0.3) + 
+  geom_point(data = newDF2, inherit.aes = FALSE, aes(x = OverallTime,  y = -200, color = factor(trialNum)),
+            lwd = 4, pch = 15)+ 
+  scale_color_viridis_d(direction = 1, option = "plasma",  name = "Trial Num") + 
+  xlab("Time (s)") + 
+  ylab("Frequency")
+
+ggsave(filename = file.path(figDir, "buzzesOverTime_hist.pdf"), width = 20, height = 10, limitsize = FALSE)
+
+
+
+
+ggplot(newDF2, aes(x=OverallTime,fill=rewardTF)) + 
+  geom_density(data=subset(newDF2,rewardTF==TRUE), aes(y = ..count..),color = 'grey10', lwd = 0.1, n = 256) +
+  geom_density(data=subset(newDF2,rewardTF==FALSE),aes( y=..count..*(-1)), color = 'grey10', lwd = 0.1, n=256 , alpha = 0.2) + 
+  scale_y_continuous(breaks=seq(-2,2,0.5),labels=abs(seq(-2,2,0.5))) + 
+  facet_wrap(~interaction(beeColHive, trt), ncol = 6) +
+  theme_classic() + 
+  theme(legend.position = c(0.8,0.1) , 
+        axis.text.x = element_text(angle = 90, size = 7), 
+        legend.direction = "horizontal")+ 
+  scale_fill_viridis_d(direction = 1, option = "cividis", name = "Rewarded", end = 0.9, begin = 0.3) + 
+  geom_point(data = newDF2, inherit.aes = FALSE, aes(x = OverallTime,  y = -0.9, color = factor(trialNum)),
+            lwd = 4, pch = 15)+ 
+  scale_color_viridis_d(direction = 1, option = "plasma",  name = "Trial Num") + 
+  xlab("Time (s)") + 
+  ylab("Frequency")
+
+ggsave(filename = file.path(figDir, "buzzesOverTime_Density.pdf"), width = 20, height = 10, limitsize = FALSE)
+
+
+
+```

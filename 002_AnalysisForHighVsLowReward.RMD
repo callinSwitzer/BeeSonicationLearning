@@ -971,6 +971,7 @@ for(jj in unique(sl$beeID)){
   
 }
 
+sl %>% head()
 
 
 
