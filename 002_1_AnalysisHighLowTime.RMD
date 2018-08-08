@@ -177,27 +177,31 @@ ggsave(filename = file.path(figDir, "buzzesOverTime_hist.pdf"), width = 20, heig
 
 
 newDF2 <- sl %>%
-  filter(trt != "full")
+  filter(trt != "full") 
+
+newDF2$rewardString = mapvalues(newDF2$rewardTF, from  = c(TRUE, FALSE), to = c("Rewarded", "Unrewarded"))
 
 textSize = 3
 
 paste(with(newDF2, as.character(unique(interaction(beeColHive, trt)))), collapse = "\', \'")
 newDF2$facet_labels = with(newDF2,gsub(x = paste0(interaction(trt,  formatC(as.numeric(as.factor(beeColHive)), width = 2, flag = 0))), pattern = "\\.",replacement = " freq reward, bee "))
 
-with(newDF2, formatC(as.numeric(as.factor(beeColHive)), width = 2, flag = 0))
+# with(newDF2, formatC(as.numeric(as.factor(beeColHive)), width = 2, flag = 0))
 
 ann_text <- data.frame(OverallTime_sep = 6000, lab = "Reward", facet_labels = factor(c("high freq reward, bee 03", "low freq reward, bee 01"), levels = levels(as.factor(newDF2$facet_labels))))
 
-ggplot(newDF2, aes(x=OverallTime_sep,fill=rewardTF, group = as.factor(trialNum))) + 
-  geom_histogram(data=subset(newDF2,rewardTF==TRUE), aes(y = ..count..),color = 'grey10', lwd = 0.1, binwidth = 50) +
-  geom_histogram(data=subset(newDF2,rewardTF==FALSE),aes( y=..count..*(-1)), color = 'grey10', lwd = 0.1, binwidth = 50 ) + 
-  scale_y_continuous(breaks=seq(-60,40,10),labels=abs(seq(-60,40,10))) + 
+ggplot(newDF2, aes(x=OverallTime_sep,fill=rewardString, group = as.factor(trialNum))) + 
+  geom_histogram(data=subset(newDF2,rewardTF==TRUE), aes(y = ..count..),color = 'grey10', lwd = 0.01, binwidth = 50) +
+  geom_histogram(data=subset(newDF2,rewardTF==FALSE),aes( y=..count..*(-1)), color = 'grey10', lwd = 0.01, binwidth = 50 ) + 
+  scale_y_continuous(breaks=seq(-60,60,10),labels=abs(seq(-60,60,10))) + 
   facet_wrap(~facet_labels, ncol = 6) +
   theme_classic() + 
-  theme(legend.position = c(0.7,0.1) , 
+  theme(legend.position = c(0.6,0.1) , 
         axis.text.x = element_text(angle = 0, size = 8), 
-        legend.direction = "horizontal")+ 
-  scale_fill_viridis_d(direction = 1, option = "cividis", name = "Rewarded", end = 0.9, begin = 0.3) + 
+        legend.direction = "vertical", 
+        legend.title = element_blank(), 
+        legend.box.background = element_rect(colour = "black"))+ 
+  scale_fill_viridis_d(direction = -1, option = "cividis", name = "", end = 0.9, begin = 0.3) + 
   geom_line(data = newDF2, inherit.aes = FALSE, aes(x = OverallTime_sep,  y = -50, color = factor(trialNum)),
             lwd = 400, show.legend = FALSE, alpha = 0.1)+ 
   scale_color_viridis_d(direction = 1, option = "plasma",  name = "Trial Num") + 
