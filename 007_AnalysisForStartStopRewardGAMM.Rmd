@@ -92,7 +92,7 @@ bees$visitNum_centered <- bees$visitNum - 50
 ggplot(bees, aes(x = visitNum_centered, y = freq, color = treatment_rewarded)) +
      stat_smooth(method = "loess", span = 1) + 
      xlab("Sonication number\n (0 is when treatment switched)") + 
-     ylab("Sonication Frequency(hz)") + 
+     ylab("Sonication frequency(hz)") + 
      facet_wrap(~trt2) + 
      scale_color_viridis(name = "Rewarded Buzzes", 
                          discrete = TRUE, begin = 0.2, end = 0.6) 
@@ -503,7 +503,7 @@ print(ITmean)
 
 freqPlot <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm == ITmean & !(duplicated(pframe[, c("blo", "bhi", "predMean")])), ], aes(x=treatment_rewarded2, y=predMean))+
      geom_point()+ 
-     labs(y = "Sonication Frequency (Hz)", x = "Treatment") + 
+     labs(y = "Sonication frequency (Hz)", x = "Treatment") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)
 freqPlot
 ggsave(plot = freqPlot, filename = file.path(figDir, "StartStop_Freq_noAnnot.pdf"), width =2.5, height = 3)
@@ -518,7 +518,7 @@ unique(pframe$IT_mm)[seq(1, length(unique(pframe$IT_mm)), length.out = 6)]
 
 freqPlotIT <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm %in% unique(pframe$IT_mm)[seq(1, length(unique(pframe$IT_mm)), length.out = 6)] & !(duplicated(pframe[, c("blo", "bhi", "predMean")])), ], aes(x=treatment_rewarded2, y=predMean))+
      geom_point()+ 
-     labs(y = "Sonication Frequency (Hz)", x = "Treatment") + 
+     labs(y = "Sonication frequency (Hz)", x = "Treatment") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) + 
   facet_wrap(~`IT Span`, labeller = label_both)
 freqPlotIT
@@ -543,7 +543,7 @@ summary(pframe)
 freqPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
      geom_line(aes(color = treatment_rewarded2))+ 
   facet_grid(.~Colony, labeller= label_both, scales = "free_x") +
-     labs(y = "Sonication Frequency (Hz)", x = "Intertegular span (mm)") + 
+     labs(y = "Sonication frequency (Hz)", x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi, fill = treatment_rewarded2), alpha = 0.2) + 
   scale_color_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
   scale_fill_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
@@ -567,7 +567,7 @@ Fig31 <- freqPlot_rug
 # make plot for one hive only
 freqPlotIT_oneHIve <- ggplot(pframe[pframe$hive == 7, ], aes(x=IT_mm, y=predMean))+
      geom_line(aes(color = treatment_rewarded2))+
-     labs(y = "Sonication Frequency (Hz)", x = "Intertegular span (mm)") + 
+     labs(y = "Sonication frequency (Hz)", x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi, fill = treatment_rewarded2), alpha = 0.2) + 
   scale_color_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
   scale_fill_viridis(name = "Treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
