@@ -9,17 +9,30 @@ editor_options:
 # Callin Switzer
 # 12 October 2016
 # update 8 Dec 2017
-# 
+# update 9 Aug 2018 -- make figures svg
+
 # Compares the bees' frequency when they are buzzing on 
 # heavy (metal added) vs. light flowers
 # Note: all pores were glued shut
 </pre>
 
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationBehavior")
-```
 
+# define data and figure directories
+windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
+                       x = Sys.info()[1]), TRUE, FALSE)
+  
+{if(windows){
+  rd = "D:/Dropbox/SonicationBehavior"
+}
+else{
+  rd = "/Users/cswitzer/Dropbox/SonicationBehavior"
+}}
+
+knitr::opts_knit$set(root.dir =rd )
+```
 
 
 ```{r}
@@ -38,15 +51,25 @@ ipak(packages)
 theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
 
 # define data and figure directories
-dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
-figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+{if(windows){
+  # windows
+  dataDir <- "D:/Dropbox/SonicationBehavior/SonBehData"
+  figDir <- "D:/Dropbox/SonicationBehavior/SonBehFigs"
+  }
+else{
+  # mac
+  dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+  figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+}}
+
+# check if the directory exists
+file.info(dataDir)$isdir
 
 
 # print system info
 print(paste("last run ", Sys.time()))
 print(R.version)
 ```
-
 
 ### Read in data and do some visualizations
 

@@ -20,8 +20,18 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-rd = "D:/Dropbox/SonicationBehavior"
-# "/Users/cswitzer/Dropbox/SonicationBehavior"
+
+# define data and figure directories
+windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
+                       x = Sys.info()[1]), TRUE, FALSE)
+  
+{if(windows){
+  rd = "D:/Dropbox/SonicationBehavior"
+}
+else{
+  rd = "/Users/cswitzer/Dropbox/SonicationBehavior"
+}}
+
 knitr::opts_knit$set(root.dir =rd )
 ```
 
@@ -39,16 +49,20 @@ packages <- c("tidyverse", "reshape2", 'lme4', 'sjPlot',
 ipak(packages)
 
 # set ggplot theme
-theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black"), text=element_text(size=16,  family="serif")))
+
 
 # define data and figure directories
-# mac
-#dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
-#figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
-
-# windows
-dataDir <- "D:/Dropbox/SonicationBehavior/SonBehData"
-figDir <- "D:/Dropbox/SonicationBehavior/SonBehFigs"
+{if(windows){
+  # windows
+  dataDir <- "D:/Dropbox/SonicationBehavior/SonBehData"
+  figDir <- "D:/Dropbox/SonicationBehavior/SonBehFigs"
+  }
+else{
+  # mac
+  dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+  figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+}}
 
 # check if the directory exists
 file.info(dataDir)$isdir
@@ -416,7 +430,7 @@ g0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
                 color="black") 
 g0
 
-ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_adjustedPvals.pdf"), width = 5, height = 4)
+ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_adjustedPvals.svg"), width = 5, height = 4)
 
 
 
@@ -546,7 +560,7 @@ ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
   annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58, label=c("a", "b", "c"),
                 color="black") 
 ga0
-ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_unadjusted.pdf"), width = 5, height = 4)
+ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_unadjusted.svg"), width = 5, height = 4)
 
 
 # make plot using bonferroni adjustments
@@ -561,7 +575,7 @@ ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
   annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58, label=c("a", "b", "a"),
                 color="black") 
 ga0
-ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_BonfAdjusted.pdf"), width = 5, height = 4)
+ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_BonfAdjusted.svg"), width = 5, height = 4)
 
 ```
 
@@ -684,13 +698,13 @@ ggplot(ppdf, aes(x = cf_Unscaled, y = predAmp))+
   geom_point(data = sl[sl$trialNum == 1, ], 
              aes(x = freq, y = amp_acc), 
              alpha = 0.2, position = position_jitter(width =2), pch =16, size = .5) 
-ggsave(filename = file.path(figDir, "FreqVsAmp_1stTrial_rawData.pdf"), width = 4, height = 3)
+ggsave(filename = file.path(figDir, "FreqVsAmp_1stTrial_rawData.svg"), width = 4, height = 3)
 
 g22 <- ggplot(ppdf, aes(x = cf_Unscaled, y = predAmp))+ 
   geom_line() + 
   labs(x = "Sonication Frequency (Hz)", y = expression ("Predicted sonication amplitude "(m~s^{-2})) ) 
 g22
-ggsave(filename = file.path(figDir, "FreqVsAmp_1stTrial.pdf"), width = 4, height = 3)
+ggsave(filename = file.path(figDir, "FreqVsAmp_1stTrial.svg"), width = 4, height = 3)
   
 ```
 
@@ -985,15 +999,6 @@ ggplot(sl, aes(x = timeSinceStart, y = grepl("t", x = rewTF, ignore.case = TRUE)
 
 ```
 
-
-### analyze the change in num of buzzes b/w rewards to see if they decrease over time
-
-```{r}
-
-
-
-
-```
 
 ```{r}
 sessionInfo()

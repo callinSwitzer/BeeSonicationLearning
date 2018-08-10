@@ -13,7 +13,19 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = "/Users/cswitzer/Dropbox/SonicationBehavior")
+
+# define data and figure directories
+windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
+                       x = Sys.info()[1]), TRUE, FALSE)
+  
+{if(windows){
+  rd = "D:/Dropbox/SonicationBehavior"
+}
+else{
+  rd = "/Users/cswitzer/Dropbox/SonicationBehavior"
+}}
+
+knitr::opts_knit$set(root.dir =rd )
 ```
 
 ```{r}
@@ -29,12 +41,21 @@ packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp",
               "tidyr","gamm4", "cowplot")
 ipak(packages)
 
-# set ggplot theme
-theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
-
 # define data and figure directories
-dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
-figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+{if(windows){
+  # windows
+  dataDir <- "D:/Dropbox/SonicationBehavior/SonBehData"
+  figDir <- "D:/Dropbox/SonicationBehavior/SonBehFigs"
+  }
+else{
+  # mac
+  dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+  figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+}}
+
+# check if the directory exists
+file.info(dataDir)$isdir
+
 
 
 # print system info
@@ -160,7 +181,7 @@ gsv$plot + facet_wrap(~Treatment) +
      ylab("Cumulative Proportion Sonicating")  + 
   geom_vline(aes(xintercept = 50), lty = 2)
 
-ggsave(file.path(figDir, "beeSonicationPercentage.pdf"), width = 5, height = 3)
+ggsave(file.path(figDir, "beeSonicationPercentage.svg"), width = 5, height = 3)
 
 
 ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4"), plot.cens = FALSE) + 
@@ -171,7 +192,7 @@ ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4"), plot.cens = FA
         legend.background = element_rect(fill = 'grey95')) + 
   geom_vline(aes(xintercept = 50), lty = 2, lwd = 0.2)
 
-ggsave(file.path(figDir, "beeSonicationPercentage_onePlot.pdf"), width = 5, height = 3.5)
+ggsave(file.path(figDir, "beeSonicationPercentage_onePlot.svg"), width = 5, height = 3.5)
 
 xtabs(~lastObs$treatment + as.character(lastObs$hive))
 
@@ -298,7 +319,7 @@ pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
 pp <- exp(predict(finmod, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
 
 # refref change to 10K
-nbootSims2 = 1000
+nbootSims2 = 10000
 ### Calculate CI's (using bootstrap, not accounting for random effects)
 bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
 print(paste("Number of bootstrap samples", nrow(bb2$t)))
@@ -317,12 +338,12 @@ pframe$treatment_rewarded2 <- relevel(pframe$treatment_rewarded2, ref = "Reward"
 print(ITmean)
 ampPlot <- ggplot(pframe[(pframe$IT_mm == ITmean) & pframe$visitNum_centered == 1 & pframe$hive == 7, ], aes(x=treatment_rewarded2, y=predMean))+
      geom_point()+ 
-     labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Treatment") + 
+     labs(y = expression ("Sonication amplitude " (m~s^{-2})), x = "Treatment") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) +
   annotate(geom="text", x=c(1,2), y=c(0, 0) + 57, label=c("a", "b"),
                 color="black") 
 ampPlot
-ggsave(plot = ampPlot, filename = file.path(figDir, "StartStopBootAmp.pdf"), width =2.5, height = 3)
+ggsave(plot = ampPlot, filename = file.path(figDir, "StartStopBootAmp.svg"), width =2.5, height = 3)
 
 
 
@@ -333,7 +354,7 @@ ampPlot1 <- ggplot(pframe[(pframe$IT_mm == ITmean) & pframe$visitNum_centered ==
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Treatment") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) 
 ampPlot1
-ggsave(plot = ampPlot1, filename = file.path(figDir, "StartStopBootAmp_noAnnot.pdf"), width =2.5, height = 3)
+ggsave(plot = ampPlot1, filename = file.path(figDir, "StartStopBootAmp_noAnnot.svg"), width =2.5, height = 3)
 
 # show how IT affects amplitude
 summary(finmod)
@@ -353,7 +374,7 @@ ampPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT_mm, ymin = blo, ymax = bhi), alpha = 0.2)
 ampPlotIT
-ggsave(plot = ampPlotIT, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP.pdf"), width =4, height = 3)
+ggsave(plot = ampPlotIT, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP.svg"), width =4, height = 3)
 
 
 
@@ -368,7 +389,7 @@ ampPlotIT2 <- ggplot(pframe, aes(x=IT_mm, y=predMean, color = treatment_rewarded
   theme(legend.position = c(0.75, 0.8), 
         legend.background = element_rect(fill = "grey95"))
 ampPlotIT2
-ggsave(plot = ampPlotIT2, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2.pdf"), width =4, height = 3)
+ggsave(plot = ampPlotIT2, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2.svg"), width =4, height = 3)
 
 bees$Hive <- mapvalues(bees$hive, from = c(7, 8), to = c("4", "5"))
 bees$Colony <- mapvalues(bees$hive, from = c(7, 8), to = c("4", "5"))
@@ -380,7 +401,7 @@ ampPlot_rug <- ampPlotIT2 + geom_rug(data = bees[!duplicated(bees$IT_mm),], inhe
         legend.background = element_rect(fill=alpha('gray95', 1)))
 ampPlot_rug
 
-ggsave(plot = ampPlot_rug, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2_rug.pdf"), width =5, height = 3.5)
+ggsave(plot = ampPlot_rug, filename = file.path(figDir, "StartStopBootAmp_ITHivePlot_SUPP2_rug.svg"), width =5, height = 3.5)
 
 
 Fig32 <- ampPlot_rug
@@ -506,7 +527,7 @@ freqPlot <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm == ITmean & !(duplicat
      labs(y = "Sonication frequency (Hz)", x = "Treatment") + 
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)
 freqPlot
-ggsave(plot = freqPlot, filename = file.path(figDir, "StartStop_Freq_noAnnot.pdf"), width =2.5, height = 3)
+ggsave(plot = freqPlot, filename = file.path(figDir, "StartStop_Freq_noAnnot.svg"), width =2.5, height = 3)
 
 
 ITmean
@@ -522,7 +543,7 @@ freqPlotIT <- ggplot(pframe[pframe$hive == 7 & pframe$IT_mm %in% unique(pframe$I
      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1) + 
   facet_wrap(~`IT Span`, labeller = label_both)
 freqPlotIT
-ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStop_Freq_noAnnot_IT.pdf"), width =2.5, height = 3)
+ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStop_Freq_noAnnot_IT.svg"), width =2.5, height = 3)
 
 
 summary(finmod)
@@ -551,7 +572,7 @@ freqPlotIT <- ggplot(pframe, aes(x=IT_mm, y=predMean))+
         legend.background = element_rect(fill=alpha('gray95', 1)))
   
 freqPlotIT
-ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStopBootFreq_ITHivePlot_SUPP2.pdf"), width =4, height = 3)
+ggsave(plot = freqPlotIT, filename = file.path(figDir, "StartStopBootFreq_ITHivePlot_SUPP2.svg"), width =4, height = 3)
 
 
 freqPlot_rug <- freqPlotIT + geom_rug(data = bees[!duplicated(bees$IT_mm),], inherit.aes = FALSE, aes(x = IT_mm)) + 
@@ -560,7 +581,7 @@ freqPlot_rug <- freqPlotIT + geom_rug(data = bees[!duplicated(bees$IT_mm),], inh
   theme(legend.position = c(0.17, 0.81), 
         legend.background = element_rect(fill=alpha('gray95', 1)))
 freqPlot_rug
-ggsave(plot = freqPlot_rug, filename = file.path(figDir, "StartStopBootFreq_ITHivePlot_SUPP2_rug.pdf"), width =5, height = 3.5)
+ggsave(plot = freqPlot_rug, filename = file.path(figDir, "StartStopBootFreq_ITHivePlot_SUPP2_rug.svg"), width =5, height = 3.5)
 
 Fig31 <- freqPlot_rug
 
@@ -575,7 +596,7 @@ freqPlotIT_oneHIve <- ggplot(pframe[pframe$hive == 7, ], aes(x=IT_mm, y=predMean
         legend.background = element_rect(fill=alpha('gray95', 1)))
   
 freqPlotIT_oneHIve
-ggsave(plot = freqPlotIT_oneHIve, filename = file.path(figDir, "StartStopBootFreq_ITOneHivePlot_SUPP2.pdf"), width =5, height = 3.7)
+ggsave(plot = freqPlotIT_oneHIve, filename = file.path(figDir, "StartStopBootFreq_ITOneHivePlot_SUPP2.svg"), width =5, height = 3.7)
 
 
 ```
@@ -592,14 +613,15 @@ p1 <- Fig31 + xlab("") + theme(legend.position = "none",
                                axis.ticks.x=element_blank()) + 
             labs(y = "Sonication frequency (Hz)") 
 p2 <- Fig32 + theme(strip.background = element_blank(),
-  strip.text.x = element_blank())
+  strip.text.x = element_blank(), legend.position = c(0.6, 0.7), legend.box.background = element_blank()) + 
+  labs(y = expression ("Sonication amplitude  "(m~s^{-2})))
 
 
 aa <- plot_grid(p1, p2, align = 'v', axis = 'l', rel_widths = c(1,1), ncol = 1, nrow = 2)
 
 ggdraw(aa)
 
-save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_IT.pdf"), plot = aa, base_width = 5, base_height = 5)
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_IT.svg"), plot = aa, base_width =6, base_height = 6)
 
 
 
@@ -620,10 +642,10 @@ ad <- add_sub(ac, "Reward Treatment", x = 0.53, y = 1, vjust = -0.2)
 ggdraw(ad)
 
 
-save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_noxlab.pdf"), plot = aa, base_width = 5.4, base_height = 3)
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_noxlab.svg"), plot = aa, base_width = 5.4, base_height = 3)
 
-save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew.pdf"), plot = ab, base_width = 5.4, base_height = 3.4)
-save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_annot.pdf"), plot = ad, base_width = 5.4, base_height = 3.9)
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew.svg"), plot = ab, base_width = 5.4, base_height = 3.4)
+save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_annot.svg"), plot = ad, base_width = 5.4, base_height = 3.9)
 
 ```
 
