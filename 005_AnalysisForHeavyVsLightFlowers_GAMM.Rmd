@@ -528,12 +528,15 @@ g04 <- gamm4(log(amp_acc) ~ s(visitNum_centered)  + treatment, random =  ~(1|bee
 
 anova(g03$mer, g04$mer) #g04 better
 summary(g04$gam) # approx p-value for smooth
-summary(g04$mer)
+summary(g04$mer) 
 
 
 
 
 g44 <- gamm4(log(amp_acc) ~ visitNum_centered  + treatment, random =  ~(1|beeID), data = newdf3)
+anova(g04$mer, g44$mer) # g44 better
+
+
 g05 <- gamm4(log(amp_acc) ~ treatment, random =  ~(1|beeID), data = newdf3)
 
 anova(g44$mer, g05$mer) #g44 better
@@ -1036,9 +1039,9 @@ ggdraw(aa)
 ac <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2), labels = "AUTO")
 ggdraw(ac)
 
-save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab_IT.pdf"), plot = aa, base_width = 7, base_height = 3)
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab_IT.svg"), plot = aa, base_width = 7, base_height = 3)
 
-save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot_IT.pdf"), plot = ac, base_width = 7, base_height = 3)
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot_IT.svg"), plot = ac, base_width = 7, base_height = 3)
 
 ```
 
