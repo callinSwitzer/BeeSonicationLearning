@@ -471,6 +471,7 @@ g1
 
 # interaction model
 # note log-transformation to make model fit assumptions better
+sl$amp_acc <- sl$amp_acc /2 # divide by 2 for analysis
 maa0 = lmer(log(amp_acc) ~ trt2* IT_imputed + hive + trialNum  + (1+trialNum|colNum), data = sl, REML = FALSE)
 
 # main effect model
@@ -487,28 +488,34 @@ maa3 <- update(maa1, .~. - hive)
 BIC(maa1, maa3) # remove hive (maa3)
 anova(maa1, maa3) # agrees with LRT
 
+m13 <- update(maa3, .~. - IT_imputed)
+anova(maa3, m13) # remove IT, according to BIC
+
 
 # refit with REML = TRUE for paper
-maa3 <- update(maa3, .~., REML = TRUE)
-summary(maa3)
+m13 <- update(m13, .~., REML = TRUE)
+summary(m13)
+
+
+
 
 
 # diagnostics
-plot(maa3)
-qqnorm(ranef(maa1)$colNum[[1]])
-qqline(ranef(maa1)$colNum[[1]])
+plot(m13)
+qqnorm(ranef(m13)$colNum[[1]])
+qqline(ranef(m13)$colNum[[1]])
 
 
-sjp.lmer(maa3) # plot random effects to find any outliers
-sjp.lmer(maa3, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+sjp.lmer(m13) # plot random effects to find any outliers
+sjp.lmer(m13, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 
 
 # post-hoc tests -- pvals for paper
-summary(glht(maa3, linfct = mcp(trt2 = "Tukey")), test = adjusted("none"))
+summary(glht(m13, linfct = mcp(trt2 = "Tukey")), test = adjusted("none"))
 
 
 # post-hoc tests with bonf adjustment
-summary(glht(maa3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
+summary(glht(m13, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
 
 ```
 
@@ -517,7 +524,7 @@ summary(glht(maa3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
 
 ```{r bootstrapAmp, cache = TRUE}
 # set number of bootstrap samples
-nbootSims2 = 10
+nbootSims2 = 100
 
 # don't need to include hive, but will set trialNum to 2
 pframe <- data.frame(trt2 = levels(droplevels(sl$trt2)), 
@@ -557,7 +564,7 @@ ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
            legend.position = 'none') +
      theme_classic() + 
-  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58, label=c("a", "b", "c"),
+  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58/2, label=c("a", "b", "c"),
                 color="black") 
 ga0
 ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_unadjusted.svg"), width = 5, height = 4)
@@ -572,7 +579,7 @@ ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
            legend.position = 'none') +
      theme_classic() + 
-  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58, label=c("a", "b", "a"),
+  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58/2, label=c("a", "b", "a"),
                 color="black") 
 ga0
 ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_BonfAdjusted.svg"), width = 5, height = 4)
@@ -705,7 +712,12 @@ g22 <- ggplot(ppdf, aes(x = cf_Unscaled, y = predAmp))+
   labs(x = "Sonication Frequency (Hz)", y = expression ("Predicted sonication amplitude "(m~s^{-2})) ) 
 g22
 ggsave(filename = file.path(figDir, "FreqVsAmp_1stTrial.svg"), width = 4, height = 3)
-  
+ 
+
+ggplot(sl, aes(x = trt2, y = IT_imputed)) + 
+  geom_point()
+
+ 
 ```
 
 
