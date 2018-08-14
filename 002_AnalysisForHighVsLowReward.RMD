@@ -746,23 +746,23 @@ fta <- fta %>%
 
 fta
 
-ggplot(fta, aes(x = trialNum, y = freqDiff, color = t5)) + 
+ggplot(fta, aes(x = trialNum, y = freq, color = t5)) + 
   geom_point(position = position_jitter(width = 0, height = 10 ), alpha= 0.2, stroke = 0) + 
   facet_wrap(~beeColHive, ncol = 6) +
   stat_smooth(data = fta[fta$trialNum > 1,], method = 'loess', se = FALSE, size =2.5, color = 'black', span = 0.5) + 
   stat_smooth(data = fta[fta$trialNum > 1,], method = 'loess', se = FALSE, size =2, span = 0.5) + 
   
-  geom_hline(aes(yintercept = 0)) + 
+  geom_hline(aes(yintercept = initialFreq)) + 
   scale_x_continuous(breaks = 1:10) + 
   scale_color_viridis_d(name = "", option = "magma", begin = 0.3,end = 0.80) + 
   theme_classic() + 
-  geom_point(aes(x = 1, y = 0), color = 'black' , size = 3, pch  = 18) + 
+  #geom_point(aes(x = 1, y = initialFreq), color = 'black' , size = 3, pch  = 18) + 
   theme(strip.background = element_blank(), 
         strip.text = element_blank(), 
         panel.border = element_rect(colour = "grey40", fill=NA, size=0.5), legend.position = 'top') + 
-  labs(y = "Frequency change (Hz)", x = "Trial Number")
+  labs(y = "Frequency (Hz)", x = "Trial Number")
 
-ggsave(filename = file.path(figDir,"freqLearningCurve.pdf"),  width = 6.5*1.5, height = 4*1.5)
+ggsave(filename = file.path(figDir,"freqLearningCurve.png"),  width = 6.5*1.5, height = 4*1.5)
 
 
 m2 = lmer(freq ~ trt2 + hive + trialNum + IT_imputed + (1+trialNum|colNum), data = st, REML = FALSE)
