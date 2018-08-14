@@ -44,12 +44,12 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("tidyverse", "reshape2", 'lme4', 'sjPlot', 
-              "multcomp", "plyr", "effects")
+packages <- c("plyr","tidyverse", "reshape2", 'lme4', 'sjPlot', 
+              "multcomp",  "effects")
 ipak(packages)
 
 # set ggplot theme
-theme_set(theme_classic() + theme(axis.text=element_text(colour="black"), text=element_text(size=16,  family="serif")))
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black"), text=element_text(size=16)))
 
 
 # define data and figure directories
@@ -164,6 +164,24 @@ mean(grepl("[tT]", as.character(sl$rewTF))) # overall mean
 
 # percentage that were rewarded by treatment
 tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, mean)
+
+# std dev for rewards by treatment
+s2 = sl %>%
+  mutate(beeColHive = interaction(beeCol, hive), 
+         reward= grepl(pattern = "t", x = .$rewTF, ignore.case = TRUE)*1) 
+s3 = s2 %>%
+  group_by(beeColHive, trt) %>%
+  dplyr::summarize(mean_reward = mean(reward)) %>%
+  group_by(trt) %>%
+  dplyr::arrange(desc(trt)) 
+
+
+# summary for paper
+s3 %>%
+  dplyr::summarize( mean_ = mean(mean_reward), reward_sd = sd(mean_reward), n = n()) %>%
+  mutate(se = reward_sd / sqrt(n))
+
+
 
 # total number of trials for each treatment
 tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, length)
@@ -374,8 +392,8 @@ summary(glht(m3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
 ### Generate CI's
 ```{r bootstrap, cache = TRUE}
 
-# set number of bOotstrap samples
-nbootSims = 10
+# set number of bootstrap samples
+nbootSims = 100
 
 ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
 print(ITmean)
@@ -458,6 +476,341 @@ g1 <- ggplot(ee, aes(x=trt2, y=fit))+
 g1
 
 ```
+
+
+#### update fig 1, to show trial number
+
+```{r bootstrap, cache = TRUE}
+
+# set number of bootstrap samples
+nbootSims = 100
+
+ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
+print(ITmean)
+
+# don't need hive, because that's not in the model we chose (above)
+pframe <- data.frame(expand.grid(trt2 = levels(droplevels(sl$trt2)), IT_imputed = ITmean,  colNum = 99999, trialNum = 2:10))
+pframe$freq <- 0
+pp <- predict(m3, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(m3, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<-bb2_se[1,]
+pframe$bhi<-bb2_se[2,]
+pframe$predMean <- pp
+pframe <- pframe[, c('trt2','trialNum', "blo", "bhi", "predMean")]
+
+#plot 95% confidence intervals
+# "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
+# rename labels for plot
+pframe$trt3 = mapvalues(pframe$trt2, from = c("full", "high", "low"), 
+                        to = c("Full range\n(220 - 450 Hz)", "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))
+
+pframe
+g00 <- ggplot(pframe, aes(x=trialNum, y=predMean))+
+  facet_wrap(~trt3) + 
+     geom_line() + 
+     labs(y = "Sonication frequency (Hz)", x = "Trial Number") + 
+     geom_ribbon(aes(ymin = blo, ymax = bhi), alpha = 0.2)  + 
+  scale_x_continuous(breaks = 2:10)
+g00
+
+ggsave(plot = g00, filename = file.path(figDir, "SonicationFreqPredsAndCI_unadjusted_learningCurve.png"), width = 5, height = 4)
+
+
+
+```
+
+
+### remake fig 1 to show raw data
+```{r}
+
+# refref: add 1st trial to each trt so show control
+
+s3 <- sl %>%
+  group_by(beeCol, trialNum, trt) %>%
+  dplyr::summarise(meanFreq = mean(freq)) %>%
+  arrange(desc(beeCol))
+s3
+  
+s3 <- s3 %>% 
+  ungroup() %>% 
+  dplyr::filter(.$beeCol %in% .$beeCol[.$trialNum > 3]) %>%
+  dplyr::group_by(beeCol) 
+
+s3
+s33 = s3 %>%
+  filter(trt != "full") %>%
+  mutate(trt3 = trt) %>%
+  right_join(s3) %>%
+  fill(trt3, .direction = "up") %>%
+  # whitepink bee that that we gave the wrong trt
+  filter(!(beeCol == 'whitepink' & trialNum == 3) ) %>%
+  mutate(t4 = mapvalues(.$trt3, from = c("full_2"), 
+                        to = c("full"))) %>%
+  mutate(t5 = mapvalues(.$t4, from = c("full", "high", "low"), 
+                        to = c("Full range\n(220 - 450 Hz)", "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)")))
+
+
+
+s33
+
+
+s4 <- s33 %>%
+  group_by(trialNum, t5) %>%
+  dplyr::summarise(meanFreq2 = mean(meanFreq), 
+                   freqSD = sd(meanFreq, na.rm = TRUE), 
+                   n = n(), 
+                   freqSE = freqSD / sqrt(n)) %>%
+  mutate(upper = meanFreq2 + 1.96*freqSE, 
+         lower = meanFreq2 - 1.96*freqSE) %>%
+  filter(trialNum < 11)
+
+
+
+s5 <- s33 %>%
+  filter(trialNum == 1) %>%
+  arrange(t5)
+
+s5
+
+s33 <- s33 %>%
+  mutate(beeCol = factor(beeCol, levels = s5$beeCol))
+
+s33$beeCol
+
+
+sl2 <- sl %>%
+   mutate(beeCol = factor(beeCol, levels = s5$beeCol)) %>%
+  filter(!(beeCol == 'whitepink' & trialNum == 3) )
+  
+
+ggplot(s33, aes(x = trialNum, y = meanFreq, group = beeCol, color = t5)) + 
+    #geom_ribbon(data = s4, inherit.aes = FALSE, aes(x = trialNum, ymax = upper, ymin = lower), alpha = 0.1) + 
+  geom_point() + 
+  geom_point(data = sl2[sl2$beeCol %in% s33$beeCol, ], inherit.aes = FALSE, aes(x = trialNum, y= freq, fill = trt2), shape = 21, stroke = 0, position = position_jitter(height = 10, width = 0 ), alpha = 0.1, show.legend = FALSE) + 
+  #geom_line() + 
+    #geom_smooth(method = 'gam', se = FALSE) +
+  facet_wrap( ~beeCol) + 
+  #theme(legend.position = "none") + 
+  #geom_line(inherit.aes = FALSE, data = s4, aes(x = trialNum, y = meanFreq2), lwd = 3) + 
+  scale_fill_viridis_d() + 
+
+  
+  labs(x = "Trial Number", y = "Frequency (Hz)") + 
+  scale_color_viridis_d(name = "") + 
+  stat_smooth(method = "loess", se = FALSE, aes(trialNum, y = meanFreq, group = 1)) + 
+  scale_x_continuous(breaks = 1:10, limits = c(1, 10))
+
+
+library(cowplot)
+
+{
+s22 <- s33[s33$t5 == "Full range\n(220 - 450 Hz)" ,]
+vb <- s22[1:2,]
+vb$meanFreq <- NA
+vb$beeCol <- c("ZZ" )
+
+
+s22 <- rbind(s22, vb)
+
+
+
+plt_full = ggplot(s22, aes(x = trialNum, y = meanFreq, group = beeCol, color = t5)) + 
+    #geom_ribbon(data = s4, inherit.aes = FALSE, aes(x = trialNum, ymax = upper, ymin = lower), alpha = 0.1) + 
+  #geom_point() + 
+  geom_point(data = sl2[sl2$beeCol %in% s33$beeCol[s33$t5 == "Full range\n(220 - 450 Hz)" ], ], inherit.aes = FALSE, aes(x = trialNum, y= freq, fill = trt2), shape = 21, stroke = 0, position = position_jitter(height = 10, width = 0 ), alpha = 0.1, show.legend = FALSE) + 
+  #geom_line() + 
+    #geom_smooth(method = 'gam', se = FALSE) +
+  facet_wrap( ~beeCol, nrow  = 1) + 
+  #theme(legend.position = "none") + 
+  #geom_line(inherit.aes = FALSE, data = s4, aes(x = trialNum, y = meanFreq2), lwd = 3) + 
+  scale_fill_viridis_d() + 
+
+  
+  labs(x = "", y = "Frequency (Hz)") + 
+  scale_color_viridis_d(name = "") + 
+  stat_smooth(method = "loess", se = FALSE, aes(trialNum, y = meanFreq, group = 1), size = 2) + 
+scale_x_continuous(breaks = seq(0, 10, 2), limits = c(1, 10)) + 
+  theme(strip.background = element_blank(), strip.text = element_blank(), 
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank())
+plt_full
+}
+
+{
+s22 <- s33[s33$t5 == "High range\n(340 - 390 Hz)" ,]
+vb <- s22[1:2,]
+vb$meanFreq <- NA
+vb$beeCol <- c("ZZ", "Z")
+
+
+s22 <- rbind(s22, vb)
+
+plt_high = ggplot(s22, aes(x = trialNum, y = meanFreq, group = beeCol, color = factor(t5, levels = levels(as.factor(s33$t5))))) + 
+  #geom_point() + 
+  geom_point(data = sl2[sl2$beeCol %in% s33$beeCol[s33$t5 == "High range\n(340 - 390 Hz)" ], ], inherit.aes = FALSE, aes(x = trialNum, y= freq, fill = trt2), shape = 21, stroke = 0, position = position_jitter(height = 10, width = 0 ), alpha = 0.1, show.legend = FALSE) + 
+  facet_wrap( ~beeCol, nrow = 1) + 
+
+  scale_fill_viridis_d(end = 0.9, direction = 1) + 
+  labs(x = "", y = "Frequency (Hz)") + 
+  stat_smooth(method = "loess", se = FALSE, aes(trialNum, y = meanFreq, group = 1, color =  factor(t5, levels = levels(as.factor(s33$t5)))), size = 2)+ 
+    scale_color_viridis_d(name = "", end = .9, direction = -1) + 
+scale_x_continuous(breaks = seq(0, 10, 2), limits = c(1, 10)) + 
+  theme(strip.background = element_blank(), strip.text = element_blank(), 
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank())
+plt_high
+}
+
+{
+plt_low = ggplot(s33[s33$t5 == "Low range\n(220 - 330 Hz)" ,], aes(x = trialNum, y = meanFreq, group = beeCol, color = factor(t5, levels = levels(as.factor(s33$t5))))) + 
+  #geom_point() + 
+  geom_point(data = sl2[sl2$beeCol %in% s33$beeCol[s33$t5 == "Low range\n(220 - 330 Hz)" ], ], inherit.aes = FALSE, aes(x = trialNum, y= freq, fill = trt2), shape = 21, stroke = 0, position = position_jitter(height = 10, width = 0 ), alpha = 0.1, show.legend = FALSE) + 
+  facet_wrap( ~beeCol, nrow = 1) + 
+
+  scale_fill_viridis_d(end = 0.5, direction = 1) + 
+  labs(x = "Trial Number", y = "Frequency (Hz)") + 
+  stat_smooth(method = "loess",  se = FALSE, aes(trialNum, y = meanFreq, group = 1, color =  factor(t5, levels = levels(as.factor(s33$t5)))), size = 2)+ 
+    scale_color_viridis_d(name = "", end = 0.5, direction = -1) + 
+  scale_x_continuous(breaks = seq(0, 10, 2), limits = c(1, 10)) + 
+  theme(strip.background = element_blank(), strip.text = element_blank())
+plt_low
+
+
+plot_grid(plt_full, plt_high, plt_low, labels = "AUTO", ncol= 1, rel_heights = c(1,1,1.3))
+}
+
+
+
+ggplot(s33, aes(x = trialNum, y = meanFreq, group = beeCol, color = trt3)) + 
+  geom_point(aes(pch =trt == "full"), size = 3) + 
+  geom_line() + 
+    #geom_smooth(method = 'gam', se = FALSE) +
+  facet_wrap(trt3~beeCol, ncol = 6) + 
+  theme(legend.position = "none") + 
+  scale_x_continuous(breaks = 2:12) + 
+  scale_shape_manual(values = c(20, 3)) + 
+  labs(x = "Trial Number", y = "Frequency (Hz)") + 
+  scale_color_viridis_d()
+
+
+```
+
+
+# model only 1st and 2nd trial
+
+```{r}
+sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
+colnames(sl)
+
+sl <- sl %>%
+  mutate(beeColHive = interaction(beeCol, hive)) %>%
+  filter(!(beeCol == "whitepink" & trialNum == 3))
+
+st <- sl %>%
+  filter(trialNum <= 10 & trialNum > 1) 
+
+
+fta <- sl %>% 
+  filter(trialNum == 1) %>% 
+  dplyr::group_by(beeColHive) %>%
+  dplyr::summarise(initialFreq = mean(freq)) %>%
+  full_join(sl) %>%
+  mutate(freqDiff = freq- initialFreq) %>%
+  filter(beeColHive %in% .$beeColHive[.$trialNum > 3]) %>%
+  dplyr::arrange(trt) 
+
+fta[fta$beeColHive == "whitepink.5", ]
+
+
+bb <- fta %>%
+  dplyr::select(beeColHive, trt, trialNum) %>%
+  dplyr::filter(trialNum == 4) %>%
+  group_by(beeColHive) %>% 
+  slice(1:1) %>%
+  dplyr::arrange(trt)
+
+bb
+
+fta <- fta %>%
+  mutate(beeColHive = factor(beeColHive, levels = bb$beeColHive), 
+       t5 = mapvalues(.$trt, from = c("full", "high", "low"), 
+                        to = c("Full range\n(220 - 450 Hz)", 
+                               "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))) %>%
+  filter(trialNum <= 10)
+
+
+fta
+
+ggplot(fta, aes(x = trialNum, y = freqDiff, color = t5)) + 
+  geom_point(position = position_jitter(width = 0, height = 10 ), alpha= 0.2, stroke = 0) + 
+  facet_wrap(~beeColHive, ncol = 6) +
+  stat_smooth(data = fta[fta$trialNum > 1,], method = 'loess', se = FALSE, size =2.5, color = 'black', span = 0.5) + 
+  stat_smooth(data = fta[fta$trialNum > 1,], method = 'loess', se = FALSE, size =2, span = 0.5) + 
+  
+  geom_hline(aes(yintercept = 0)) + 
+  scale_x_continuous(breaks = 1:10) + 
+  scale_color_viridis_d(name = "", option = "magma", begin = 0.3,end = 0.80) + 
+  theme_classic() + 
+  geom_point(aes(x = 1, y = 0), color = 'black' , size = 3, pch  = 18) + 
+  theme(strip.background = element_blank(), 
+        strip.text = element_blank(), 
+        panel.border = element_rect(colour = "grey40", fill=NA, size=0.5), legend.position = 'top') + 
+  labs(y = "Frequency change (Hz)", x = "Trial Number")
+
+ggsave(filename = file.path(figDir,"freqLearningCurve.pdf"),  width = 6.5*1.5, height = 4*1.5)
+
+
+m2 = lmer(freq ~ trt2 + hive + trialNum + IT_imputed + (1+trialNum|colNum), data = st, REML = FALSE)
+
+m2_1 = lmer(freq ~ trt2* IT_imputed + hive + trialNum  + (1+trialNum|colNum), data = st, REML = FALSE)
+
+
+m2_2 = lmer(freq ~ trt2* IT_imputed + hive + trialNum  + I(trialNum^2) + (1+trialNum|colNum), data = st, REML = FALSE)
+
+# compare models with BIC
+BIC(m2_2, m2_1) # m2 (no interaction) is better
+
+m2_3 <- lmer(freq ~ trt2* IT_imputed + hive + trialNum  + I(trialNum^2) + I(trialNum^3) +  (1+trialNum|colNum), data = st, REML = FALSE)
+# compare models with BIC
+BIC(m2_2, m2_3) # m2 (no interaction) is better
+
+m3_1 = update(m2_2,.~ . - trt2:IT_imputed)
+BIC(m2_2, m3_1)
+
+
+
+m3 = update(m3_1, .~. - hive)
+BIC(m3_1, m3) # m3 is better (without hive)
+
+# refit best model with REML = TRUE
+m3 <- update(m3, .~., REML = TRUE)
+summary(m3) # summary for paper -- leave trial number in, to account for random effect
+plot(m3)
+qqnorm(ranef(m3)$colNum[[1]])
+qqline(ranef(m3)$colNum[[1]])
+
+sjp.lmer(m3) # plot random effects to find any outliers
+sjp.lmer(m3, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+
+
+# post-hoc tests -- pvals for paper
+summary(glht(m3, linfct = mcp(trt2 = "Tukey")), test = adjusted("none"))
+
+## bonf adjusted pvals
+summary(glht(m3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
+
+
+
+```
+
+
+
+
 
 ### ____ END OF ANALYSIS FOR PAPER ____ ### 
 
