@@ -703,6 +703,9 @@ ggplot(s33, aes(x = trialNum, y = meanFreq, group = beeCol, color = trt3)) +
 
 # model only 1st and 2nd trial
 
+
+## visualization of frequency over time
+
 ```{r}
 sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
 colnames(sl)
@@ -753,29 +756,165 @@ fta <- fta %>%
                                "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))) %>%
   filter(trialNum <= 10)
 
-fta$lo
+
+
+s44 = fta %>%
+  group_by(trialNum, beeColHive, t5) %>%
+  dplyr::summarise(meanFreq2 = mean(freq))
+s44
+
+# plot to show trials
 
 ggplot(fta, aes(x = trialNum, y = freq, color = t5)) + 
-  geom_point(position = position_jitter(width = 0, height = 10 ), alpha= 0.2, stroke = 0) + 
-  facet_wrap(~beeColHive, ncol = 6) +
-  geom_ribbon(data = fta[fta$trialNum > 1,], aes(x = rep(seq(1.5, 12, 3),  length.out = nrow(fta[fta$trialNum > 1,])), ymin = lowFrq, ymax = highFrq), alpha = 0.2, color = NA) + 
-  geom_ribbon(data = fta[fta$trialNum > 1,], aes(x = rep(seq(0, 1.5, 1.5),  length.out = nrow(fta[fta$trialNum > 1,])), ymin = 220, ymax = 450), alpha = 0.2, color = NA) + 
-  stat_smooth(data = fta[fta$trialNum > 1,], method = 'loess', se = FALSE, size =1.5, color = 'black', span = 0.5) + 
-  stat_smooth(data = fta[fta$trialNum > 1,], method = 'loess', se = FALSE, size =1, span = 0.5) + 
+  geom_ribbon(data = fta[fta$trialNum > 1,], 
+              aes(x = rep(seq(1.5, 12, 3),  
+                          length.out = nrow(fta[fta$trialNum > 1,])), 
+                  ymin = lowFrq, ymax = highFrq), alpha = 0.2, color = NA) + 
+  geom_point(position = position_jitter(width = 0, height = 10), 
+             alpha= 0.2, stroke = 0, aes( shape = t5 )) + 
   
+  facet_wrap(~beeColHive, ncol = 8) +
+    
+  geom_line(data = s44, aes(x = trialNum, y = meanFreq2), color = 'black', lwd = 0.8, show.legend = FALSE) + 
+  geom_line(data = s44, aes(x = trialNum, y = meanFreq2, color = t5), lwd = 0.8, show.legend = FALSE) + 
+  
+  geom_point(data = s44, aes(x = trialNum, y = meanFreq2), 
+             color = 'black', pch = 18, show.legend = FALSE) + 
+
+  
+  geom_ribbon(data = fta[fta$trialNum > 1,], 
+              aes(x = rep(seq(0.5, 1.5, 1),  
+                          length.out = nrow(fta[fta$trialNum > 1,])), 
+                  ymin = 220, ymax = 450), alpha = 0.2, color = NA) + 
   geom_hline(aes(yintercept = initialFreq)) + 
-  #geom_boxplot(aes(group = trialNum), outlier.colour = NA) + 
+  # stat_smooth(data = fta[fta$trialNum > 1,], 
+  #             method = 'loess', se = FALSE, 
+  #             size =1.5, color = 'black', span = 0.6) + 
+  # stat_smooth(data = fta[fta$trialNum > 1,], 
+  #             method = 'loess', 
+  #             se = FALSE, size =1, span = 0.6) + 
   scale_x_continuous(breaks = seq(0, 10, 2)) + 
-  scale_color_viridis_d(name = "", option = "magma", begin = 0.3,end = 0.80) + 
+  scale_color_viridis_d(name = "",
+                        option = "magma", begin = 0.3,
+                        end = 0.80, 
+                        guide = guide_legend(override.aes = list(alpha = 1, size = 4))) + 
   theme_classic() + 
-  #geom_point(aes(x = 1, y = initialFreq), color = 'black' , size = 3, pch  = 18) + 
   theme(strip.background = element_blank(), 
         strip.text = element_blank(), 
-        panel.border = element_rect(colour = "grey40", fill=NA, size=0.5), legend.position = 'top') + 
-  labs(y = "Frequency change (Hz)", x = "Trial Number")
+        panel.border = element_rect(colour = "grey40", 
+                                    fill=NA, size=0.5), 
+        legend.position = 'top') + 
+  scale_shape_manual(name = "", values = c(16,17,15)) + 
+   
+  labs(y = "Frequency (Hz)", x = "Trial Number")
 
-ggsave(filename = file.path(figDir,"freqLearningCurve.png"),  width = 6.5*1.5, height = 4*1.5)
+ggsave(filename = file.path(figDir,"freqLearningCurve.png"),
+       dpi = 500,  width = 6.5*1.5, height = 4*1.5, units = "in")
 
+```
+
+
+### look at amplitude change over time
+```{r}
+
+sl <- sl %>%
+  mutate(beeColHive = interaction(beeCol, hive)) %>%
+  # remove two trials I messed up
+  filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
+  filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
+  mutate(amp_acc2 = amp_acc / 2)
+
+
+
+
+fta <- sl %>% 
+  filter(trialNum == 1) %>% 
+  dplyr::group_by(beeColHive) %>%
+  dplyr::summarise(initialAmp = mean(amp_acc2)) %>%
+  full_join(sl) %>%
+  mutate(ampDiff = amp_acc2- initialAmp) %>%
+  filter(beeColHive %in% .$beeColHive[.$trialNum > 1]) %>%
+  dplyr::arrange(trt) 
+
+fta[fta$beeColHive == "limepurple.5", ]
+
+cc <- fta %>%
+  filter(trialNum > 1) %>%
+  group_by(beeColHive) %>%
+  summarize(meanAmp = mean(amp_acc2))
+cc %>% print(n = Inf)
+
+
+# use bb from above, to maintain order
+# bb <- fta %>%
+#   dplyr::select(beeColHive, trt, trialNum, initialAmp) %>%
+#   dplyr::filter(trialNum == 2 | trialNum == 3) %>%
+#   group_by(beeColHive) %>% 
+#   slice(1:1) %>%
+#   full_join(cc) %>%
+#   mutate(ampDiff = initialAmp - meanAmp) %>%
+#   dplyr::arrange(trt, desc(ampDiff))
+# 
+# bb
+
+fta <- fta %>%
+  mutate(beeColHive = factor(beeColHive, levels = bb$beeColHive), 
+       t5 = mapvalues(.$trt, from = c("full", "high", "low"), 
+                        to = c("Full range\n(220 - 450 Hz)", 
+                               "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))) %>%
+  filter(trialNum <= 10)
+
+
+
+s44 = fta %>%
+  group_by(trialNum, beeColHive, t5) %>%
+  dplyr::summarise(meanamp2 = mean(amp_acc2))
+s44
+
+# plot to show trials
+
+ggplot(fta, aes(x = trialNum, y = amp_acc2, color = t5)) + 
+  
+  geom_point(position = position_jitter(width = 0, height = 0 ), 
+             alpha= 0.2, stroke = 0, aes( shape = t5 )) + 
+  
+  facet_wrap(~beeColHive, ncol = 8) +
+    
+  geom_line(data = s44, aes(x = trialNum, y = meanamp2), color = 'black', lwd = 0.8, show.legend = FALSE) + 
+  geom_line(data = s44, aes(x = trialNum, y = meanamp2, color = t5), lwd = 0.8, show.legend = FALSE) + 
+  
+  geom_point(data = s44, aes(x = trialNum, y = meanamp2), 
+             color = 'black', pch = 18, show.legend = FALSE) + 
+
+  geom_hline(aes(yintercept = initialAmp)) + 
+  # stat_smooth(data = fta[fta$trialNum > 1,], 
+  #             method = 'loess', se = FALSE, 
+  #             size =1.5, color = 'black', span = 0.6) + 
+  # stat_smooth(data = fta[fta$trialNum > 1,], 
+  #             method = 'loess', 
+  #             se = FALSE, size =1, span = 0.6) + 
+  scale_x_continuous(breaks = seq(0, 10, 2)) + 
+  scale_color_viridis_d(name = "",
+                        option = "magma", begin = 0.3,
+                        end = 0.80, 
+                        guide = guide_legend(override.aes = list(alpha = 1, size = 4))) + 
+  theme_classic() + 
+  theme(strip.background = element_blank(), 
+        strip.text = element_blank(), 
+        panel.border = element_rect(colour = "grey40", 
+                                    fill=NA, size=0.5), 
+        legend.position = 'top') + 
+  scale_shape_manual(name = "", values = c(16,17,15)) + 
+   
+  labs( y = expression ("Sonication amplitude "(m~s^{-2})), x = "Trial Number")
+
+ggsave(filename = file.path(figDir,"AmplChangeOverTime.png"),
+       dpi = 200,  width = 6.5*1.5, height = 4*1.5, units = "in")
+
+```
+
+
+```{r}
 
 m2 = lmer(freq ~ trt2 + hive + trialNum + IT_imputed + (1+trialNum|colNum), data = st, REML = FALSE)
 
@@ -1086,15 +1225,103 @@ ggplot(sl, aes(x = trt2, y = IT_imputed)) +
 ```
 
 
-## analyze time between buzzes
+## analyze time between buzzes and num buzzes between rewards
 ```{r}
 # convert time to datetime format
+
+# fresh dataset
+sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
+
+sl <- sl %>%
+  mutate(beeColHive = interaction(beeCol, hive))
+
+
 options(digits.secs=6)
-sl$dateTime_fmt= strptime(x = sl$datetime_str, format = "%Y-%m-%d  %H:%M:%OS" )
+sl$dateTime_fmt= as.POSIXct(strptime(x = sl$datetime_str, format = "%Y-%m-%d  %H:%M:%OS" ))
 
 sl %>% head
 
+sl$rewTF
+colnames(sl)
+
 # calculate time since beginning of trial
+trialStart <- sl %>%
+  # remove two trials I messed up
+  filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
+  filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
+  
+  dplyr::select(beeColHive, trialNum, dateTime_fmt) %>%
+  filter(trialNum <= 10) %>%
+  group_by(beeColHive, trialNum) %>%
+  slice(1:1) %>%
+  rename(trialStart = dateTime_fmt) %>%
+  full_join(sl) %>%
+  mutate(timeSinceStart = difftime(dateTime_fmt , trialStart, unit = 'sec')) %>%
+  dplyr::select(beeColHive, trialNum, timeSinceStart, rewTF, dateTime_fmt, trt) %>%
+  filter(rewTF == TRUE) %>%
+  mutate(timeSinceReward = timeSinceStart - lag(timeSinceStart)) %>%
+  arrange((dateTime_fmt)) %>%
+  group_by(beeColHive) %>% mutate(index = row_number()) %>%
+  filter(!is.na(timeSinceReward)) %>%
+  #filter(timeSinceReward < 100000) %>%
+  filter(beeColHive %in% .$beeColHive[.$trialNum > 1]) 
+
+# note, use bb from above  
+# bb <- trialStart %>%
+#   dplyr::select(beeColHive, trt, trialNum) %>%
+#   dplyr::filter(trialNum == 2 | trialNum == 3) %>%
+#   group_by(beeColHive) %>% 
+#   slice(1:1) %>%
+#   dplyr::arrange(trt)
+# 
+# bb
+
+trialStart <- trialStart %>%
+  ungroup() %>%
+  mutate(beeColHive = factor(beeColHive, levels = bb$beeColHive), 
+       t5 = mapvalues(.$trt, from = c("full", "high", "low"), 
+                        to = c("Full range\n(220 - 450 Hz)", 
+                               "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))) %>%
+  filter(trialNum <= 10)
+
+s44 <- trialStart %>%
+ # filter(trialNum == 1) %>%
+  group_by(beeColHive, trialNum, t5) %>%
+  dplyr::summarise(meanInitialTime = mean((as.numeric(timeSinceReward))))
+
+s44
+
+ggplot(trialStart, aes(x = trialNum, y = as.numeric(timeSinceReward))) + 
+  geom_point(alpha = 0.2, aes(color = t5, shape = t5)) + 
+  facet_wrap(~beeColHive, ncol = 8) + 
+  scale_color_viridis_d(name = "",
+                        option = "magma", begin = 0.3,
+                        end = 0.80, 
+                        guide = guide_legend(override.aes = list(alpha = 1, size = 4))) + 
+  scale_shape_manual(name = "", values = c(16,17,15)) + 
+  #scale_y_log10() + 
+  labs(x = "Trial Number", y = "Time between rewards (s)") + 
+  theme_classic() + 
+  theme(strip.background = element_blank(), 
+        strip.text = element_blank(), 
+        panel.border = element_rect(colour = "grey40", 
+                                    fill=NA, size=0.5), 
+        legend.position = 'top') + 
+  # stat_smooth(method = 'loess', se = FALSE, aes(color = t5)) + 
+  geom_hline(data = s44[s44$trialNum == 1,], aes(yintercept = as.numeric(meanInitialTime))) +
+  
+  geom_line(data = s44, aes(y = as.numeric(meanInitialTime), x = trialNum),lwd = 0.8, show.legend = FALSE) +
+  geom_line(data = s44, aes(y = as.numeric(meanInitialTime), x = trialNum, color = t5), lwd = 0.8, show.legend = FALSE) +
+  geom_point(data = s44, aes(y = as.numeric(meanInitialTime), x = trialNum), pch = 18) +
+  scale_x_continuous(breaks = seq(2, 10, 2)) + 
+  ylim(c(-1, 100))
+
+ggsave(filename = file.path(figDir,"timeBWRewards.png"),
+       dpi = 500,  width = 6.5*1.5, height = 4*1.5, units = "in")
+
+
+
+
 timeSinceStart = list()
 timeDiff = list()
 timeSinceReward = list()
@@ -1103,8 +1330,6 @@ prevRewardTime = NA
 buzzesSinceReward = list()
 
 # calculate num of buzzes since last reward
-
-
 for(ii in 1:nrow(sl)){
   
   tmp = sl[ii, c("BeeNumCol", "dateTime_fmt", "rewTF", "index")]
@@ -1152,7 +1377,7 @@ sl %>% head
 plot(sl$timeSinceStart[1:500])
 plot(sl$timeSinceLastBuzz[1:1000])
 
-plot(sl$buzzesSinceReward[1:5000])
+plot(na.omit(sl$buzzesSinceReward[1:5000]), xlim = c(0, 5000))
 
 ggplot(data = sl[1:10000, ], mapping = aes(x = index, y = timeSinceReward, color= trt)) + 
 # geom_boxplot() + 
@@ -1202,8 +1427,8 @@ ggplot(data = sl[grepl(pattern = "t", ignore.case = TRUE, x = sl$rewTF) & !(sl$t
 
 unique(sl[1000:5000, ]$BeeNumCol)
 
-View(sl[sl$BeeNumCol == "Beelimered11_16Dec2016_Hive5_low", ])
-View(sl[grepl(pattern = "redpink1", x = as.character(sl$BeeNumCol)), ])
+# View(sl[sl$BeeNumCol == "Beelimered11_16Dec2016_Hive5_low", ])
+# View(sl[grepl(pattern = "redpink1", x = as.character(sl$BeeNumCol)), ])
 ggplot(data = sl[sl$BeeNumCol == "Beelimered11_16Dec2016_Hive5_low", ], mapping = aes(x = index, y = buzzesSinceReward, color= trt)) + 
 # geom_boxplot() + 
    geom_point(alpha = 0.5) + 
