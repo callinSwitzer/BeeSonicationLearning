@@ -44,7 +44,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("plyr","tidyverse", "reshape2", 'lme4', 'sjPlot', 
+packages <- c("tidyverse", "reshape2", 'lme4', 'sjPlot', 
               "multcomp",  "effects")
 ipak(packages)
 
@@ -75,22 +75,61 @@ print(R.version)
 ### Read in data and double check it
 
 ```{r}
-sl <- read.csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
+sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
 colnames(sl)
 
 
+
+
+sl <- sl %>%
+  # gets rid of the copious warnings
+  mutate(timeSinceStart = NA, timeSinceLastBuzz = NA, buzzesSinceReward = NA) %>%
+  # make sure all bee colors are lowercase
+  mutate(beeCol =  tolower(beeCol)) %>%
+  # color + hive is an ID var 
+  mutate(beeColHive = interaction(beeCol, hive), 
+         colNum = paste(beeCol, hive, sep = "_")) %>%
+  # remove two trials I messed up
+  filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
+  filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
+  # convert hive to factor
+  mutate(hive = as.factor(hive),
+         trt2  = ifelse(trt == 'full' & trialNum > 1, "full_2", as.character(trt)), 
+         trt = relevel(factor(trt), ref = "full")) %>%
+  # divide amplitud by 2
+  mutate(amp_acc2 = amp_acc / 2) %>%
+  mutate(trialNum0 = trialNum - 1)
+  
+
+
+initialFreqAmp <- sl %>%
+  dplyr::select(beeColHive, trialNum, freq, amp_acc2) %>%
+  filter(trialNum == 1) %>%
+  group_by(beeColHive) %>%
+  summarize(initialFreq = mean(freq), 
+            initialAmp2 = mean(amp_acc2)) %>%
+  full_join(sl) %>%
+  mutate(ampDiff = amp_acc2 - initialAmp2, 
+         freqDiff = freq - initialFreq) %>%
+  dplyr::select(beeColHive, trialNum, freqDiff, ampDiff, 
+                IT_imputed, rewTF, trt, hive, trt2, 
+                freq, amp_acc2, trialNum0, initialFreq, initialAmp2) 
+  
+
+initialFreqAmp
+  
+
 # calculate proportion of rewards by trt
-prop.table(xtabs(~ sl$rewTF + sl$trt), margin = 2)
-xtabs(~ sl$rewTF + sl$trt)
+prop.table(xtabs(~ initialFreqAmp$rewTF + initialFreqAmp$trt), margin = 2)
+xtabs(~ initialFreqAmp$rewTF + initialFreqAmp$trt)
 
-
-# make sure hive is a factor
-sl$hive = as.factor(sl$hive)
-unique(sl$hive)
 
 # number of trials per bee
-xtabs(~sl$beeCol)
-hist(xtabs(~sl$beeCol))
+sl %>% 
+  group_by(beeColHive) %>%
+  summarize(count = n()) %>%
+  print(n = Inf)
+hist(xtabs(~as.character(sl$beeColHive)))
 max(xtabs(~sl$beeCol))
 mean(xtabs(~sl$beeCol))
 sd(xtabs(~sl$beeCol))
@@ -142,13 +181,12 @@ apply(tdf2, MARGIN = 2, function(x) length(x[x>0]))
 
 
 head(sl)
-dim(sl) # should be 24303 rows
+dim(sl) # should be 24176 rows
 
 # hive 5 is most common
 table(sl$hive, useNA = 'always')
 
-## make sure all bee colors are lowercase
-sl$beeCol <- tolower(sl$beeCol)
+
 
 # make sure there are values lower than 220 and higher than 450 
 # (the cutoff for buzzes used in the experiment)
@@ -192,127 +230,7 @@ tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, FUN = function(x)
 # total number of trials that were unrewarded per treatment
 tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, FUN = function(x) sum(!x))
 
-
-# calculate mean freq per bee per trial
-d1 <- as.data.frame((tapply(sl$freq, INDEX = list(sl$beeCol, sl$trt), mean)))
-d2 <- as.data.frame((tapply(sl$freq, INDEX = list(sl$beeCol, sl$trt), length)))
-d3 <- data.frame(d1, d2)
-d3$beeCol = row.names(d3)
-
-
-d4 <- melt(d3, id.vars=c("beeCol"), measure.vars=c("full", "high", "low" ), value.name = "buzzFreq")
-d5 <- melt(d3, id.vars=c("beeCol"), measure.vars=c("full.1",  "high.1", "low.1" ), value.name = "NumBuzzes")
-
-
-d6 <- data.frame(d4, d5)
-d7 <- d6[!is.na(d6$buzzFreq),]
-d7
-
-# this plot shows how individual bees changed
-ggplot(d7, aes(x = variable, y = buzzFreq)) + 
-  geom_boxplot(aes(fill = variable == "full"), alpha = 0.2) + 
-  geom_point(aes(color = variable == "full", size = NumBuzzes)) + 
-  geom_line(aes(group = beeCol), alpha = 0.2) + 
-  scale_fill_viridis_d(name = "hihi", guide = FALSE, option = "A", end = 0.6) + 
-  scale_color_viridis_d(name = "hihi", guide = FALSE, option = "A", end = 0.6) + 
-  labs(x = "treatment")
-
-
-
 ```
-
-### Visualizations and modeling
-
-```{r aggregate, cache = TRUE}
-# calculate trial averages and plot
-sl$colNum = paste(sl$beeCol, sl$hive, sep = "_")
-sl$trt <- as.character(sl$trt)
-sl$trt[sl$trt == "full" & sl$trialNum >1 ] <- "full_2"
-
-
-aggdata <- aggregate(sl$freq, by=list(colNum = sl$colNum,trialNum =sl$trialNum, trt = sl$trt), FUN=mean, na.rm=TRUE)
-colnames(aggdata)[colnames(aggdata) == "x"] = "freq"
-
-aggdata_sd <- aggregate(sl$freq, by=list(colNum = sl$colNum,trialNum =sl$trialNum, trt = sl$trt), FUN=sd, na.rm=TRUE)
-colnames(aggdata_sd)[colnames(aggdata_sd) == "x"] = "freq_sd"
-
-aggdata = merge(aggdata, aggdata_sd)
-#aggdata$trt = sapply(1:nrow(aggdata), FUN = function(x){sl[sl$colNum == aggdata$colNum[x] & sl$trialNum == aggdata$trialNum[x], "trt"][1]})
-aggdata = aggdata[order(aggdata$colNum, aggdata$trialNum, decreasing = FALSE), ]
-agg_sm = aggdata[aggdata$trialNum <= 2, ]
-rownames(agg_sm) = 1:nrow(agg_sm)
-agg_sm
-
-
-
-agg_sm[duplicated(data.frame(agg_sm$colNum, agg_sm$trialNum)), ]
-
-
-
-
-
-
-diffdf <- sapply(unique(agg_sm$colNum), FUN = function(x){
-  tmp = agg_sm[agg_sm$colNum == x, ]
-  if(nrow(tmp) <= 1)
-    diff = NA
-  else
-    diff = tmp$freq[tmp$trialNum == 2] - tmp$freq[tmp$trialNum == 1]
-  return(diff)
-})
-
-trtDF = sapply(unique(agg_sm$colNum), FUN = function(x){
-  tmp = agg_sm[agg_sm$colNum == x, ]
-  ttrs = paste(tmp$trt[tmp$trialNum == 1], tmp$trt[tmp$trialNum == 2], sep = "_")
-  return(ttrs)
-})
-
-buzzdiffs = data.frame(trtDF, diffdf)
-
-ggplot(buzzdiffs, aes(x = trtDF, y= diffdf)) + 
-  geom_boxplot() + 
-  geom_point()
-
-         
-agg2 = aggregate(sl$freq, by=list(colNum = sl$colNum, fullTrt = sl$trt == "full", trt = sl$trt), FUN=mean, na.rm=TRUE)
-colnames(agg2)[colnames(agg2) == "x"] = "freq"
-agg2$trt = as.character(agg2$trt)
-
-diffdf <- t(as.data.frame(t(sapply(unique(agg2$colNum), FUN = function(x){
-  tmp = agg2[agg2$colNum == x, ]
-  if(nrow(tmp) <= 1)
-    return(NA)
-  if (length(unique(tmp$trt)) > 2){
-    tmp = tmp[tmp$trt != "full_2", ]
-  }
-  diff =  tmp$freq[!tmp$fullTrt] - tmp$freq[tmp$fullTrt]
-  return(diff)
-
-}))))
-
-length(diffdf)
-
-trtDF = sapply(unique(agg2$colNum), FUN = function(x){
-  tmp = agg2[agg2$colNum == x, ]
-  if (length(unique(tmp$trt)) > 2){
-    tmp = tmp[tmp$trt != "full_2", ]
-  }
-  ttrs = paste(tmp$trt[tmp$fullTrt], tmp$trt[!tmp$fullTrt], sep = "_")
-  return(ttrs)
-})
-
-length(trtDF)
-
-buzzdiffs = data.frame(trtDF, diffdf)
-tapply(buzzdiffs$diffdf, INDEX = buzzdiffs$trtDF, mean)
-
-ggplot(droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]), aes(x = trtDF, y= as.numeric(diffdf))) + 
-  geom_boxplot() + 
-  geom_point() + 
-  labs(y = "diff in frequency -- averages")
-
-```
-
 
 
 ### MODELING
@@ -320,15 +238,21 @@ ggplot(droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]), aes(x = trtDF, y= as
 
 ```{r}
 
-sl$trt = relevel(factor(sl$trt), ref = "full")
-
-
-sl$trt2 = mapvalues(sl$trt, from = c("full", "full_2", "high", "low"), 
-                    to = c("full", "full", "high", "low"))
 # summary for paper
 # fit a varying slope and intercept for colNum (bee ID), and allow the slope of the trialNum
 # variable to vary by colNum (beeID)
-m2 = lmer(freq ~ trt2 + hive + trialNum + IT_imputed + (1+trialNum|colNum), data = sl, REML = FALSE)
+
+
+# basically the same model
+
+
+
+m2 = lmer(freq ~ trt2 + hive + trialNum0 + IT_imputed + (1+trialNum0|beeColHive), data = sl, REML = FALSE)
+summary(m2)
+
+m2 = lmer(freq ~ trt2 + hive  + IT_imputed + trialNum0 + initialFreq*trt2 +   (1|beeColHive), data = initialFreqAmp, REML = FALSE)
+summary(m2)
+
 
 # this model estimates a global intercept
 # random effect intercept for colNum (beeID)
@@ -358,7 +282,9 @@ vif.mer <- function (fit) {
 
 vif.mer(m2) # fine
 
-m2_1 = lmer(freq ~ trt2* IT_imputed + hive + trialNum  + (1+trialNum|colNum), data = sl, REML = FALSE)
+m2_1 = lmer(freq ~ trt2* IT_imputed + hive + trialNum0*trt2  + (1+trialNum|beeColHive), data = sl, REML = FALSE)
+
+m2_1 = lmer(freq ~ trt2 * IT_imputed + hive + (1|beeColHive), data = initialFreqAmp, REML = FALSE)
 
 # compare models with BIC
 BIC(m2, m2_1) # m2 (no interaction) is better
@@ -369,13 +295,19 @@ anova(m2, m2_1) # Note: this disagrees with BIC
 m3 = update(m2, .~. - hive)
 BIC(m2, m3) # m3 is better (without hive)
 anova(m2, m3) # Note: disagrees with BIC
+summary(m3)
+
+m4 <- update(m3, .~. - IT_imputed)
+BIC(m3, m4)
+
+
 
 # refit best model with REML = TRUE
 m3 <- update(m3, .~., REML = TRUE)
 summary(m3) # summary for paper -- leave trial number in, to account for random effect
 plot(m3)
-qqnorm(ranef(m3)$colNum[[1]])
-qqline(ranef(m3)$colNum[[1]])
+qqnorm(ranef(m3)$beeColHive[[1]])
+qqline(ranef(m3)$beeColHive[[1]])
 
 sjp.lmer(m3) # plot random effects to find any outliers
 sjp.lmer(m3, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
@@ -711,10 +643,23 @@ sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
 colnames(sl)
 
 sl <- sl %>%
+  # gets rid of the copious warnings
+  mutate(timeSinceStart = NA, timeSinceLastBuzz = NA, buzzesSinceReward = NA) %>%
   mutate(beeColHive = interaction(beeCol, hive)) %>%
   # remove two trials I messed up
   filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
-  filter(!(beeCol == "limepurple" & trialNum == 3))
+  filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
+  mutate(t5 = recode(.$trt, "full" = "Full range\n(220 - 450 Hz)", 
+                       "high" = "High range\n(340 - 390 Hz)\nsecond trial", 
+                       "low" = "Low range\n(220 - 330 Hz)\nsecond trial")) %>%
+  mutate(t6 = t5, 
+         t6 = ifelse(.$trt == 'full' & .$trialNum == 1, 
+                     "Full range \n(220 - 450 Hz)\nfirst trial", t5), 
+         t6 = ifelse(.$trt == 'full' & .$trialNum > 1, 
+                     "Full range \n(220 - 450 Hz)\nsecond trial", t6)
+         )
+
+
 
 st <- sl %>%
   filter(trialNum <= 10 & trialNum > 1) 
@@ -750,10 +695,10 @@ bb <- fta %>%
 bb
 
 fta <- fta %>%
-  mutate(beeColHive = factor(beeColHive, levels = bb$beeColHive), 
-       t5 = mapvalues(.$trt, from = c("full", "high", "low"), 
-                        to = c("Full range\n(220 - 450 Hz)", 
-                               "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))) %>%
+  mutate(beeColHive = factor(beeColHive, levels = bb$beeColHive)) %>% 
+  mutate(t5 = recode(.$trt, "full" = "Full range\n(220 - 450 Hz)", 
+                       "high" = "High range\n(340 - 390 Hz)", 
+                       "low" = "Low range\n(220 - 330 Hz)")) %>%
   filter(trialNum <= 10)
 
 
@@ -811,13 +756,130 @@ ggplot(fta, aes(x = trialNum, y = freq, color = t5)) +
 ggsave(filename = file.path(figDir,"freqLearningCurve.png"),
        dpi = 500,  width = 6.5*1.5, height = 4*1.5, units = "in")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+options(digits.secs=6)
+# plot buzzes for first trial
+ftrl <- sl %>%
+  filter(trialNum  <= 2 ) %>%
+  mutate(dateTime_fmt= as.POSIXct(strptime(x = .$datetime_str, 
+                                           format = "%Y-%m-%d  %H:%M:%OS" ))) %>%
+  arrange(dateTime_fmt) %>%
+  group_by(beeColHive) %>%
+  mutate(index = row_number())
+  
+dd = sl %>%
+  filter(trialNum == 2 | trialNum == 3) %>%
+  mutate(trialNum = 99) %>%
+  ungroup() %>%
+  group_by(beeColHive, trt, trialNum) %>%
+  summarise(meanTT = n()) %>%
+  arrange(trt, meanTT)
+dd
+
+dd %>% print(n = Inf)
+
+ee = sl %>%
+  filter(trialNum == 1) %>%
+  ungroup() %>%
+  group_by(beeColHive, trt, trialNum) %>%
+  summarise(meanTT = n()) %>%
+  rbind(dd) %>%
+  arrange(beeColHive, desc(trialNum)) %>%
+  group_by(beeColHive) %>%
+  filter(row_number(beeColHive) == 1) %>%
+  arrange(trt, meanTT)
+  
+ee %>% print(n = Inf)
+
+
+
+unique(dd$beeColHive)
+unique(ftrl$beeColHive)
+
+ftrl = ftrl %>%
+  ungroup() %>%
+  mutate(beeColHive = factor(.$beeColHive, levels = ee$beeColHive)) %>%
+  filter(beeColHive %in% ee$beeColHive[ee$meanTT > 20]) 
+
+ggplot(ftrl, aes(x = index, y = freq, color = t6)) + 
+  
+  geom_point(alpha = 0.4, stroke = 0, aes(shape = t6)) + 
+  facet_wrap(~beeColHive, ncol = 8 ) + 
+  stat_smooth(aes(group = t6), method = 'loess', color = "black", se = FALSE, span = 0.7, lwd = 0.4) + 
+  scale_color_viridis_d(name = "",
+                        option = "magma", begin = 0.3,
+                        end = 0.80, 
+                        guide = guide_legend(override.aes = list(alpha = 1, size = 4))) + 
+  scale_shape_manual(name = "", values = c(16,17,15, 18)) + 
+  theme_classic() + 
+  theme(strip.background = element_blank(), 
+        strip.text = element_blank(), 
+        panel.border = element_rect(colour = "grey40", 
+                                    fill=NA, size=0.5), 
+        legend.position = 'top')  + 
+  scale_x_continuous(breaks = seq(0, 400, 200), limits = c(0, 400)) + 
+  labs(x = "Sonication Number", y =  "Frequency (Hz)") + 
+  geom_ribbon(aes(ymin = lowFrq, ymax = highFrq), alpha = 0.2, color = NA)
+  
+  
+ggsave(filename = file.path(figDir,"FreqChangeFirstAndSecTrial.png"),
+       dpi = 500,  width = 6.5*1.5, height = 4*1.5, units = "in")
+
+
+
+ggplot(ftrl[ftrl$trialNum == 1,], aes(x = index, y = freq, color = t6)) + 
+  
+  geom_point(alpha = 0.4, stroke = 0, aes(shape = t6)) + 
+  facet_wrap(~beeColHive, ncol = 8 ) + 
+  stat_smooth(aes(group = t6), method = 'loess', color = "black", se = FALSE,span =0.7, lwd = 0.4) + 
+  scale_color_viridis_d(name = "",
+                        option = "magma", begin = 0.3,
+                        end = 0.80, 
+                        guide = guide_legend(override.aes = list(alpha = 1, size = 4))) + 
+  scale_shape_manual(name = "", values = c(16,17,15, 18)) + 
+  theme_classic() + 
+  theme(strip.background = element_blank(), 
+        strip.text = element_blank(), 
+        panel.border = element_rect(colour = "grey40", 
+                                    fill=NA, size=0.5), 
+        legend.position = 'top')  + 
+  scale_x_continuous(breaks = seq(0, 50, 20), limits = c(0, 50)) + 
+  labs(x = "Sonication Number", y =  "Frequency (Hz)") 
+  
+  
+ggsave(filename = file.path(figDir,"FreqChangeFirstTrial.png"),
+       dpi = 500,  width = 6.5*1.5, height = 4*1.5, units = "in")
+
+
 ```
+
 
 
 ### look at amplitude change over time
 ```{r}
 
 sl <- sl %>%
+  # gets rid of the copious warnings
+  mutate(timeSinceStart = NA, timeSinceLastBuzz = NA, buzzesSinceReward = NA) %>%
   mutate(beeColHive = interaction(beeCol, hive)) %>%
   # remove two trials I messed up
   filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
