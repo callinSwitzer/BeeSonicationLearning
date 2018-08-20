@@ -1,0 +1,148 @@
+---
+title: "002_2_HighLowLearningCurve"
+author: "Callin Switzer"
+date: "August 20, 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+<pre>
+Fitting Wright learning curve to frequency data
+</pre>
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+windows = ifelse(grepl(pattern = "wind", ignore.case = TRUE, 
+                       x = Sys.info()[1]), TRUE, FALSE)
+
+{if(windows){
+  rd = "D:/Dropbox/SonicationBehavior"
+}
+else{
+  rd = "/Users/cswitzer/Dropbox/SonicationBehavior"
+}}
+
+
+knitr::opts_knit$set(root.dir =rd )
+```
+
+# Callin Switzer
+# 20 Aug 2018
+# Learning model
+
+```{r}
+#install packages
+ipak <- function(pkg){
+     new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+     if(length(new.pkg)) install.packages(new.pkg, dependencies = TRUE)
+     sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("tidyverse")
+ipak(packages)
+
+
+# set ggplot theme
+theme_set(theme_classic() + theme(axis.text=element_text(colour="black")))
+
+# define data and figure directories
+{if(windows){
+  # windows
+  dataDir <- "D:/Dropbox/SonicationBehavior/SonBehData"
+  figDir <- "D:/Dropbox/SonicationBehavior/SonBehFigs"
+  }
+else{
+  # mac
+  dataDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehData"
+  figDir <- "/Users/cswitzer/Dropbox/SonicationBehavior/SonBehFigs"
+}}
+
+
+# check if the directory exists
+file.info(dataDir)$isdir
+print(dataDir)
+
+print(paste("last run ", Sys.time()))
+print(R.version)
+```
+
+
+
+
+
+
+
+```{r}
+sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
+colnames(sl)
+
+options(digits.secs=6)
+sl <- sl %>% 
+  mutate(dateTime_fmt =  as.POSIXct(as.character(datetime_str), 
+                                    format = "%Y-%m-%d  %H:%M:%OS"), 
+         beeColHive = as.character(interaction(beeCol, hive))) %>%
+  arrange(beeColHive,trialNum, dateTime_fmt) %>% 
+  group_by(beeColHive, trialNum) %>%
+  mutate(timeDiff = as.numeric(difftime(dateTime_fmt, lag(dateTime_fmt), units = "sec"))) 
+
+# add NA for time diff whenever a new trial starts
+for(ii in 1:(nrow(sl) - 1)){
+  if(sl$BeeNumCol[ii + 1] != sl$BeeNumCol[ii]){
+    sl$timeDiff[ii + 1] <- NA
+  }
+}
+
+sl <- sl %>%
+  # add cumulative time for each bee
+  transform(OverallTime = ave(timeDiff, interaction(beeColHive), FUN=function(x) cumsum(coalesce(x, 0)) + x*0)) %>%
+  # calculate continuous buzz number
+  mutate(continuousCount = ave(beeColHive==beeColHive,beeColHive, FUN=cumsum), 
+        rewardTF = grepl("t", tolower(rewTF))) %>%
+  # separate each trial by 1 minute
+  mutate(OverallTime_sep = OverallTime + 60*trialNum) # add 1 min breaks between trials
+
+
+
+sl <- sl %>%
+  group_by(beeColHive) %>%
+  mutate(cumFreq = cumsum(freq)) %>%
+  arrange(beeColHive, continuousCount) %>%
+  mutate(cumAvgFreq = cumFreq / continuousCount)
+  
+sl  
+
+
+
+ggplot(sl[sl$trialNum == 2,], aes(x = continuousCount, y = cumAvgFreq, color = trt)) + 
+  geom_point() + 
+  facet_wrap(~beeColHive) + 
+  scale_x_log10() + 
+  scale_y_log10() + 
+  stat_smooth(method = "lm") + 
+  scale_color_viridis_d(name = "Treatment")
+
+
+# fit lmer
+library(lme4)
+
+m1 <- lmer(log(cumAvgFreq, base = 10) ~ log(continuousCount, base = 10) *  trt + (1|beeColHive), data = sl)
+summary(m1)
+
+plot(m1)
+
+
+
+
+a = 10^(1.08036)
+b = -0.61806
+
+
+plot(x = rawDat$VisitNo, y = rawDat$cumAvgLatency)
+curve(a*x^b, from= 1, to = 10, add= TRUE)
+
+
+```
