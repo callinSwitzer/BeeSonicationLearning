@@ -80,14 +80,31 @@ print(R.version)
 sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
 colnames(sl)
 
+
 options(digits.secs=6)
 sl <- sl %>% 
+  # remove two trials I messed up
+  filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
+  filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
   mutate(dateTime_fmt =  as.POSIXct(as.character(datetime_str), 
                                     format = "%Y-%m-%d  %H:%M:%OS"), 
-         beeColHive = as.character(interaction(beeCol, hive))) %>%
+         beeColHive = as.character(interaction(beeCol, hive)), 
+         trialNum = ifelse(beeColHive == "orange.3" & trialNum >= 2, trialNum -1, trialNum)) %>%
   arrange(beeColHive,trialNum, dateTime_fmt) %>% 
   group_by(beeColHive, trialNum) %>%
-  mutate(timeDiff = as.numeric(difftime(dateTime_fmt, lag(dateTime_fmt), units = "sec"))) 
+  mutate(timeDiff = as.numeric(difftime(dateTime_fmt, lag(dateTime_fmt), units = "sec"))) %>%
+  group_by(beeColHive, trialNum) %>%
+  
+  # remove mess-up on whitepink bee
+  filter(!(beeColHive == "whitepink.5" & trialNum == 2 & trt == "full")) %>%
+  
+  # redo index to make sure each starts at 1
+  mutate(index =row_number(), 
+         rewNum = cumsum(rewTF)) 
+
+
+# View(sl[sl$beeColHive == "whitepink.5" & sl$trialNum == 2, ])
+
 
 # add NA for time diff whenever a new trial starts
 for(ii in 1:(nrow(sl) - 1)){
@@ -95,6 +112,8 @@ for(ii in 1:(nrow(sl) - 1)){
     sl$timeDiff[ii + 1] <- NA
   }
 }
+
+
 
 sl <- sl %>%
   # add cumulative time for each bee
@@ -112,12 +131,25 @@ sl <- sl %>%
   mutate(cumFreq = cumsum(freq)) %>%
   arrange(beeColHive, continuousCount) %>%
   mutate(cumAvgFreq = cumFreq / continuousCount)
-  
-sl  
+
+# order df
+
+orderDF <- sl %>%
+  filter(trialNum == 2) %>%
+  group_by(trt, beeColHive) %>%
+  summarize(n = n()) %>%
+  arrange(trt, n)
+
+orderDF %>%
+  group_by(trt) %>%
+  summarize(n = n())
+
+sl <- sl %>%
+  ungroup() %>%
+  mutate(beeColHive = factor(.$beeColHive, levels = orderDF$beeColHive))
 
 
-
-ggplot(sl[sl$trialNum == 2,], aes(x = continuousCount, y = cumAvgFreq, color = trt)) + 
+ggplot(sl[sl$trialNum == 2,], aes(x = index, y = cumAvgFreq, color = trt)) + 
   geom_point() + 
   facet_wrap(~beeColHive) + 
   scale_x_log10() + 
@@ -126,23 +158,266 @@ ggplot(sl[sl$trialNum == 2,], aes(x = continuousCount, y = cumAvgFreq, color = t
   scale_color_viridis_d(name = "Treatment")
 
 
+
 # fit lmer
 library(lme4)
 
-m1 <- lmer(log(cumAvgFreq, base = 10) ~ log(continuousCount, base = 10) *  trt + (1|beeColHive), data = sl)
+sl_2 <- sl %>% filter(trialNum == 2) %>% 
+  ungroup() %>%
+  #filter(trt == "low") %>%
+  mutate(beeColHive = factor(.$beeColHive), 
+         trt = factor(.$trt)) 
+
+m1 <- lmer(log(cumAvgFreq) ~ I(log(index)) * trt +  (1|beeColHive) , data = sl_2)
 summary(m1)
+
+# m2 <- lmer(log(cumAvgFreq) ~ I(log(index)) + trt +  (1+I(log(index))|beeColHive) , data = sl_2)
+# summary(m2)
+# 
+# anova(m1, m2, "LRT")
+# 
+# m3 <- lmer(log(cumAvgFreq) ~ I(log(index)) +  (1+I(log(index))|beeColHive) , data = sl_2)
+# summary(m3)
+# anova(m2, m3, "LRT")
+# 
+# 
+# m1 <- m3
+
 
 plot(m1)
 
+summary(m1)
 
 
 
-a = 10^(1.08036)
-b = -0.61806
+# predictions
+newDat <- data.frame(expand.grid(index = 1:150, 
+                                 trt = levels(sl_2$trt), 
+                                beeColHive = levels(sl_2$beeColHive))) 
+
+newDat <- newDat %>% mutate(cumAvgFreq = exp(predict(m1, newDat)), 
+                            cumAvgFreq_noRE = exp(predict(m1, newDat, re.form= NA))) %>%
+  filter(interaction(beeColHive, trt) %in% interaction(sl_2$beeColHive, sl_2$trt))
 
 
-plot(x = rawDat$VisitNo, y = rawDat$cumAvgLatency)
-curve(a*x^b, from= 1, to = 10, add= TRUE)
+nbootSims = 500
+pframe <- newDat
+pframe$cumAvgFreq <- 0
+pp <- exp(predict(m1, newdata = pframe, re.form=NA)) # re.form sets all random effects to 0
+# pp <- (predict(m1, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
+
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(m1, FUN=function(x) exp(predict(x, pframe, re.form=NA, type = 'response')), nsim = nbootSims)
+#bb2 <- bootMer(m1, FUN=function(x) (predict(x, pframe, re.form=NA, type = 'link')), nsim = nbootSims)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<-bb2_se[1,]
+pframe$bhi<-bb2_se[2,]
+pframe$predMean <- pp
+pframe <- pframe[, c('trt', 'rewNum', "trialNum", "blo", "bhi", "predMean")]
+pframe
+
+
+
+
+ggplot(sl[sl$trialNum == 2,], aes(x = index, y = cumAvgFreq, color = trt)) + 
+  geom_point() + 
+  facet_wrap(~beeColHive) + 
+  geom_line(data = newDat) + 
+  scale_x_log10() + 
+  scale_y_log10() + 
+  #stat_smooth(method = "lm") + 
+  scale_color_viridis_d(name = "Treatment") + 
+  labs(y = "Cumulative Average Frequency", x = "Sonication Number")
+
+
+
+ggplot(sl[sl$trialNum == 2,], aes(x = index, y = cumAvgFreq, color = trt)) + 
+  geom_point(alpha = 0.5, stroke = 0) + 
+  geom_ribbon(data = pframe,inherit.aes = FALSE, aes(x = index, ymax = bhi, ymin = blo, fill = trt), alpha = 0.2) +
+  facet_wrap(~trt) + 
+  geom_line(data = newDat, aes(y = cumAvgFreq_noRE), size = 1.2) + 
+  scale_x_log10() + 
+  scale_y_log10(breaks= c(280, 300, 320, 340, 360, 380)) + 
+  #stat_smooth(method = "lm") + 
+  scale_color_viridis_d(name = "Treatment") + 
+  scale_fill_viridis_d(name = "Treatment") + 
+  labs(y = "Cumulative Average\nSonication Frequency", x = "Sonication Number") + 
+  theme(legend.position = "top",
+        strip.background.x = element_blank(), 
+        strip.text.x = element_blank()
+        )
+
+
+ggsave(filename = file.path(figDir, "LearningCurve_Frequency.png"), width = 6, heigh = 4, dpi = 400, units = "in" )
+
+```
+
+
+# counter between rewards
+
+```{r}
+sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
+colnames(sl)
+
+
+options(digits.secs=6)
+sl <- sl %>% 
+  # remove two trials I messed up
+  filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
+  filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
+  mutate(dateTime_fmt =  as.POSIXct(as.character(datetime_str), 
+                                    format = "%Y-%m-%d  %H:%M:%OS"), 
+         beeColHive = as.character(interaction(beeCol, hive)), 
+         trialNum = ifelse(beeColHive == "orange.3" & trialNum >= 2, trialNum -1, trialNum)) %>%
+  arrange(beeColHive,trialNum, dateTime_fmt) %>% 
+  group_by(beeColHive, trialNum) %>%
+  mutate(timeDiff = as.numeric(difftime(dateTime_fmt, lag(dateTime_fmt), units = "sec"))) %>%
+  group_by(beeColHive, trialNum) %>%
+  
+  # remove mess-up on whitepink bee
+  filter(!(beeColHive == "whitepink.5" & trialNum == 2 & trt == "full")) %>%
+  
+  # redo index to make sure each starts at 1
+  mutate(index =row_number(), 
+         rewNum = cumsum(rewTF))  
+
+#sl[sl$beeColHive == "orange.3",] %>% View
+
+
+rewTime <- sl %>%
+  ungroup() %>%
+  select(beeColHive, trt, trialNum, rewTF, dateTime_fmt, index, rewNum) %>%
+  group_by(beeColHive, trialNum) %>%
+  mutate(timeDiff = as.numeric(difftime(dateTime_fmt, lag(dateTime_fmt), units = "sec"))) %>%
+  filter(rewTF & trt != "full") %>%
+  mutate(buzzesBwReward = index - lag(index)) %>%
+  filter(!is.na(buzzesBwReward)) %>%
+  mutate(cumAvgBuzzesBwRw = cumsum(buzzesBwReward) / rewNum) %>%
+  mutate(rewNum  = rewNum) %>%
+  ungroup()
+
+rewTime <- rewTime %>%
+  filter(trialNum <= 2)
+
+rewOrd = rewTime %>%
+  group_by(beeColHive, trt) %>%
+  summarise(n = n()) %>%
+  arrange(trt, n)
+
+rewTime <- mutate(rewTime, beeColHive = factor(beeColHive, levels = rewOrd$beeColHive)) %>%
+  mutate(trialNum = factor(trialNum), 
+         beeColHive = factor(beeColHive), 
+         trt = factor(trt))
+
+
+rewTime
+
+ggplot(rewTime, aes(x = rewNum, y = cumAvgBuzzesBwRw, color = interaction(trt, as.factor(trialNum)), shape= trt)) + 
+  geom_point() + 
+  facet_wrap(~beeColHive) + 
+  scale_y_log10() + 
+  scale_x_log10() + 
+  stat_smooth(method = 'lm', aes(group = beeColHive), se = FALSE, color = "red") + 
+  scale_color_viridis_d(name = "treatment", end = 0.6) + 
+  labs(x = "Reward Number", y = "Cumulative Average Num. of Buzzes b/w rewards")
+
+
+m1 <- lmer(log(cumAvgBuzzesBwRw) ~ log(rewNum) * trt + (1 + log(rewNum)|beeColHive) , data = rewTime)
+summary(m1)
+plot(m1)
+
+# m2 <- glmer(cumAvgBuzzesBwRw ~ I(log(rewNum)) * trt + (1 + I(log(rewNum)) | beeColHive), family = Gamma(link = "log"), data = rewTime)
+
+
+# m1 <- m2
+
+# predictions
+newDat <- data.frame(expand.grid(rewNum = min(rewTime$rewNum):max(rewTime$rewNum), 
+                                 trt = levels(rewTime$trt), 
+                                beeColHive = levels(rewTime$beeColHive), 
+                                trialNum = 2:10)) 
+newDat %>% head
+
+newDat <- newDat %>% mutate(cumAvgBuzzesBwRw = exp(predict(m1, newDat)), 
+                            cumAvg_noRe = exp(predict(m1, newDat, re.form = NA))) %>%
+  filter(interaction(beeColHive, trt) %in% interaction(rewTime$beeColHive, rewTime$trt))
+
+nbootSims = 1000
+pframe <- newDat
+pframe$cumAvgBuzzesBwRw <- 0
+pp <- exp(predict(m1, newdata = pframe, re.form=NA)) # re.form sets all random effects to 0
+# pp <- (predict(m1, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
+
+
+
+### Calculate CI's (using bootstrap, not accounting for random effects)
+bb2 <- bootMer(m1, FUN=function(x) exp(predict(x, pframe, re.form=NA, type = 'response')), nsim = nbootSims)
+#bb2 <- bootMer(m1, FUN=function(x) (predict(x, pframe, re.form=NA, type = 'link')), nsim = nbootSims)
+print(paste("Number of bootstrap samples", nrow(bb2$t)))
+bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+pframe$blo<-bb2_se[1,]
+pframe$bhi<-bb2_se[2,]
+pframe$predMean <- pp
+pframe <- pframe[, c('trt', 'rewNum', "trialNum", "blo", "bhi", "predMean")]
+pframe
+
+
+ggplot(rewTime, aes(x = rewNum, y = cumAvgBuzzesBwRw, group = interaction(trialNum), color = trt)) + 
+  geom_point() + 
+  facet_wrap(~beeColHive) + 
+  geom_line(data = pframe, aes(y = predMean, color =as.factor(trialNum))) + 
+  scale_x_log10() + 
+  scale_y_log10() + 
+  #stat_smooth(method = "lm") + 
+  scale_color_viridis_d(name = "Treatment", end = 0.7)
+
+
+# bootstrap CI's
+ggplot(rewTime, aes(x = rewNum, y = cumAvgBuzzesBwRw, color = trt)) + 
+  geom_point(alpha = 0.8, position = position_jitter(height= 0, width = 0.00 ), stroke = 0, size = 1.3) + 
+  geom_line(data = pframe, aes(y = predMean, group = interaction(trt))) + 
+  geom_ribbon(data = pframe,inherit.aes = FALSE, aes(x = rewNum, ymax = bhi, ymin = blo, fill = trt), alpha = 0.2) + 
+  facet_wrap(~trt) + 
+  scale_x_log10(breaks = 2^c(1,2,3,4,5,6)) + 
+  scale_y_log10(breaks = 2^c(0,1,2,3,4,5,6)) + 
+  #stat_smooth(method = "lm") + 
+  scale_color_viridis_d(name = "Treatment", begin = 0.5) + 
+  scale_fill_viridis_d(name = "Treatment", begin= 0.5) + 
+  labs(x = "Reward Number", y = "Cumulative Average Number of\nBuzzes between Rewards") + 
+  theme(strip.background = element_blank(), strip.text.x = element_blank(), 
+        legend.position = "top")
+ggsave(filename = file.path(figDir, "LearningCurve_buzzNum.png"), width = 6, heigh = 4, dpi = 400, units = "in" )
+
+
+# bootstrap CI's
+ggplot(rewTime, aes(x = rewNum, y = cumAvgBuzzesBwRw, group = interaction(trialNum), color = trt)) + 
+  geom_point(alpha = 0.2, position = position_jitter(height= 0.1, width = 0.01 ), stroke = 0, size = 1.3) + 
+  geom_line(data = pframe, aes(y = predMean, group = interaction(trt, as.factor(trialNum)))) + 
+  geom_ribbon(data = pframe,inherit.aes = FALSE, aes(x = rewNum, ymax = bhi, ymin = blo, fill = trt), alpha = 0.2) + 
+  facet_wrap(~trt) + 
+  scale_x_log10(breaks = 2^c(1,2,3,4,5,6)) + 
+  scale_y_log10(breaks = 2^c(0,1,2,3,4,5,6)) + 
+  #stat_smooth(method = "lm") + 
+  scale_color_viridis_d(name = "Treatment", begin = 0.5) + 
+  scale_fill_viridis_d(name = "Treatment", begin= 0.5) + 
+  labs(x = "Reward Number", y = "Cumulative Average Number of\nBuzzes between Rewards") + 
+  theme(strip.background = element_blank(), strip.text.x = element_blank(), 
+        legend.position = "top")
+ggsave(filename = file.path(figDir, "LearningCurve_buzzNum2.png"), width = 6, heigh = 4, dpi = 400, units = "in" )
+
+
+ggplot(rewTime, aes(x = rewNum, y = cumAvgBuzzesBwRw, group = interaction(trialNum), color = trt)) + 
+  geom_point() + 
+  geom_line(data = newDat, aes(y = cumAvg_noRe, group = interaction(trt, as.factor(trialNum)))) + 
+  scale_x_log10() + 
+  scale_y_log10() + 
+  #stat_smooth(method = "lm") + 
+  scale_color_viridis_d(name = "Treatment", end = 0.7) + 
+  labs(x = "Reward Number", y = "Cumulative Average Num. of Buzzes b/w rewards")
+
 
 
 ```
