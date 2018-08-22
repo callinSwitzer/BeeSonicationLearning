@@ -1244,11 +1244,60 @@ ggplot(droplevels(buzzdiffs[buzzdiffs$trtDF != "full_", ]), aes(x = trtDF, y= as
 ## Plot amplitude vs. frequency for initial trial, accounting for size
 
 ```{r}
-ggplot(sl[sl$trialNum == 1, ], aes(x = freq, y = amp_acc)) + 
-  geom_point(position = position_jitter(width = 3), alpha = 0.2) + 
+ggplot(sl[sl$trialNum == 1, ], aes(x = freq, y = amp_acc2)) + 
+  geom_point(position = position_jitter(width = 1), alpha = 0.2) + 
   theme_classic() + 
-  geom_smooth(aes(group = trt2)) + 
-  labs( y = expression ("Sonication amplitude "(m~s^{-2})), x = "Frequency (Hz)")
+  stat_smooth(aes(group = trt), method = "loess", se = TRUE, color = "grey40") + 
+  labs( y = expression ("Sonication amplitude "(m~s^{-2})), x = "Sonication Frequency (Hz)")
+
+ggsave(filename = file.path(figDir, "FreqVAmp_t1.png"), width = 6, heigh = 4, dpi = 500, unit = "in")
+
+ggplot(sl[sl$trialNum == 1, ], aes(x = freq, y = amp_acc2)) + 
+  geom_point(position = position_jitter(width = 1), alpha = 0.2) + 
+  theme_classic() + 
+  facet_wrap(~beeColHive) + 
+  stat_smooth(aes(group = trt), method = "loess", se = TRUE, color = "grey40") + 
+  labs( y = expression ("Sonication amplitude "(m~s^{-2})), x = "Sonication Frequency (Hz)")
+
+ggsave(filename = file.path(figDir, "FreqVAmp_t1_facet.png"), width = 12, heigh = 12, dpi = 500, unit = "in")
+
+
+ggplot(sl, aes(x = freq, y = amp_acc2, color = trt)) + 
+  geom_point(position = position_jitter(width = 1), alpha = 0.01, stroke = 0) + 
+  theme_classic() + 
+  facet_wrap(~beeColHive) + 
+  stat_smooth(aes(color = trt, fill = trt, group = trt), method = "loess", se = FALSE) + 
+  labs( y = expression ("Sonication amplitude "(m~s^{-2})), x = "Sonication Frequency (Hz)")
+
+ggsave(filename = file.path(figDir, "FreqVAmp_t1_facet_trt.png"), width = 12, heigh = 12, dpi = 500, unit = "in")
+
+
+
+
+
+mm1 <- lmer(log(amp_acc2) ~ I(scale(freq)) + I(scale(freq)^2) + I(scale(freq)^3) +
+              I(scale(freq)^4) + (1|beeColHive), data = sl[sl$trialNum == 1, ])
+
+mm2 <- lmer(log(amp_acc2) ~ I(scale(freq)) + I(scale(freq)^2) + I(scale(freq)^3)  + (1|beeColHive), data = sl[sl$trialNum == 1, ])
+
+summary(mm2)
+
+plot(mm2)
+
+plot(x = sl[sl$trialNum == 1, ]$freq, y = exp(predict(mm2, re.form =NA)))
+
+
+
+
+
+ggplot(sl[sl$trialNum >= 2, ], aes(x = freq, y = amp_acc2)) + 
+  geom_point(position = position_jitter(width = 1), alpha = 0.2, stroke = 0) + 
+  theme_classic() + 
+  facet_wrap(~trt, ncol = 1) + 
+  stat_smooth(aes(color = trt), method = "loess", se = TRUE) + 
+  labs( y = expression ("Sonication amplitude "(m~s^{-2})), x = "Sonication Frequency (Hz)") + 
+  scale_color_viridis_d(name = "Treatment")
+ggsave(filename = file.path(figDir, "FreqVAmp_allTrts.png"), width = 6, heigh = 4, dpi = 500, unit = "in")
 
 centerFreq = scale(sl[sl$trialNum == 1, "freq"])
 
