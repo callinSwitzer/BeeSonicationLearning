@@ -1043,6 +1043,8 @@ save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab_IT.svg"), plot
 
 save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot_IT.svg"), plot = ac, base_width = 7, base_height = 3)
 
+save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot_IT.png"), plot = ac, base_width = 7, base_height = 3)
+
 ```
 
 
