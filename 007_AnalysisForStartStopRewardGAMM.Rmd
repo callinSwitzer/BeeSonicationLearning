@@ -36,7 +36,7 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", 
+packages <- c("tidyverse", "ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", 
               "plyr", "effects", "viridis", "GGally", "survminer", 
               "tidyr","gamm4", "cowplot")
 ipak(packages)
@@ -77,6 +77,10 @@ bees$amp_acc <- bees$amp_acc/2
 # to make sure it agrees with what is already in the dataframe
 tapply(bees$freq, INDEX = list(bees$beeID, bees$treatment_rewarded), mean)
 
+
+
+
+
 # number of bees -- should be 96
 length(unique(bees$BeeNumCol))
 
@@ -97,7 +101,18 @@ apply(table(bees$BeeNumCol, bees$treatment), MARGIN = 2, nzmean)
 
 # num observations -- should be 5851
 nrow(bees)
+
+
+# calculate num of buzzes in each treatment
+xtabs(~bees$treatment)
+length(unique(bees$beeID[bees$treatment == "RewFir"]))
+length(unique(bees$beeID[bees$treatment == "RewSec"]))
+
 ```
+
+
+Time dependent: https://cran.r-project.org/web/packages/survival/vignettes/timedep.pdf
+
 
 ## Visualize data
 ```{r}
@@ -134,11 +149,66 @@ lastObs$index <- as.numeric(lastObs$visitNum)
 # 1 = censored, 2 = stopped buzzing for 5 min
 lastObs$status <- mapvalues(lastObs$index == 100, from = c(TRUE, FALSE), to = c(1, 2))
 
+lastObs2 <- lastObs %>%
+  dplyr::select(BeeNumCol, treatment, index) %>%
+  mutate(treatment = as.factor(unlist(.$treatment)))
+
+lastObs2
+
+# reshape to add time-dependent covariate
+# subject, time1, time2, death, covariate (rewarded)
+
+timeDF <- as.tbl(bees) %>%
+  dplyr::select(BeeNumCol, treatment, treatment_rewarded, visitNum) %>%
+  mutate(pollenReward = recode(treatment_rewarded, 
+                " T"  = TRUE, 
+                " F" = FALSE)) %>%
+  dplyr::select(-treatment_rewarded) %>%
+  group_by(BeeNumCol, pollenReward) %>%
+  filter(visitNum == max(visitNum) | visitNum == min(visitNum)) %>%
+  
+  group_by(BeeNumCol) 
+
+
+timeMax = timeDF %>%
+  filter(visitNum == max(visitNum)) %>%
+  mutate(censor = recode(visitNum, `100` = "censor", 
+                         .default = "give up"))
+
+timeDF <- timeDF %>%
+  full_join(timeMax) %>%
+  mutate(censor = replace_na(.$censor, replace = 0))
+
+timeDF2 = timeDF %>%
+  mutate(time1 = visitNum,
+    time2 = lead(visitNum, 1), 
+    censor2 = lead(censor), 
+    pollenR2 = lead(pollenReward)) %>%
+  filter(time2 != 1) %>%
+  dplyr::select(-censor) %>%
+  filter(time2 != 51) %>%
+  dplyr::select(c(-pollenReward, -visitNum)) %>%
+  mutate(death_ = (censor2 == "give up")*1, 
+         censor2 = (censor2 == "censor")*1) %>%
+  mutate(time1 = replace(time1, time1 == 51, 50))
+
+timeDF2 %>% print(n = 50)
+
+
+# cox model
+m1 <- coxph(formula = Surv(time1, time2, death_) ~  pollenR2, data = timeDF2)
+summary(m1)
+
+m2 <- coxph(formula = Surv(time1, time2, death_) ~  treatment + pollenR2, data = timeDF2)
+
+anova(m1, m2)
+
+
+
 # create survival object
 lastObs$survObj <- with(lastObs, Surv(index, status == 2))
 head(lastObs)
 
-lastObs$treatment <- as.factor(unlist(lastObs$treatment))
 
 
 ## Kaplan-Meier estimator. 
@@ -155,6 +225,8 @@ anova(s1, s2)
 s3 <- coxph(survObj ~ Treatment + unlist(IT_mm), data = lastObs) 
 summary(s3) # IT not important in Cox model
 
+
+s4 <- coxph(survObj ~ Treatment + unlist(IT_mm), data = lastObs) 
 
 
 s3 <- coxph(survObj ~ I(lastObs$visitNum > 50), data = lastObs) 
