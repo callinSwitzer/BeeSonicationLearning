@@ -38,7 +38,7 @@ ipak <- function(pkg){
 
 packages <- c("tidyverse", "ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", 
               "plyr", "effects", "viridis", "GGally", "survminer", 
-              "tidyr","gamm4", "cowplot")
+              "tidyr","gamm4", "cowplot", "coxme")
 ipak(packages)
 
 # define data and figure directories
@@ -78,12 +78,15 @@ bees$amp_acc <- bees$amp_acc/2
 tapply(bees$freq, INDEX = list(bees$beeID, bees$treatment_rewarded), mean)
 
 
-
-
-
 # number of bees -- should be 96
 length(unique(bees$BeeNumCol))
 
+
+# num bees per colony
+bees %>%
+  dplyr::select(BeeNumCol, hive) %>%
+  distinct() %>%
+  summarize(numHive = count(hive))
 
 # number of buzzes per bee
 xtabs(~bees$BeeNumCol)
@@ -159,7 +162,7 @@ lastObs2
 # subject, time1, time2, death, covariate (rewarded)
 
 timeDF <- as.tbl(bees) %>%
-  dplyr::select(BeeNumCol, treatment, treatment_rewarded, visitNum) %>%
+  dplyr::select(BeeNumCol, treatment, treatment_rewarded, visitNum, IT_mm, hive) %>%
   mutate(pollenReward = recode(treatment_rewarded, 
                 " T"  = TRUE, 
                 " F" = FALSE)) %>%
@@ -188,65 +191,94 @@ timeDF2 = timeDF %>%
   dplyr::select(-censor) %>%
   filter(time2 != 51) %>%
   dplyr::select(c(-pollenReward, -visitNum)) %>%
-  mutate(death_ = (censor2 == "give up")*1, 
+  mutate(stop_pollinating = (censor2 == "give up")*1, 
          censor2 = (censor2 == "censor")*1) %>%
-  mutate(time1 = replace(time1, time1 == 51, 50)) 
+  mutate(time1 = replace(time1, time1 == 51, 50)) %>%
+  mutate(survObj = Surv(.$time1, .$time2, .$stop_pollinating))
 
-timeDF2 %>% print(n = 50)
+timeDF2 %>% arrange(desc(treatment)) %>% print(n = 50)
+timeDF2 <- timeDF2 %>%
+  mutate(treatment = as.factor(treatment), 
+         pollenR2 = as.factor(pollenR2), 
+         hive = as.factor(hive))
+
+table(timeDF2$treatment)
+sum(timeDF2$stop_pollinating) # num that stopped
+length(unique(timeDF2$BeeNumCol)) # total num of bees
+
+# Old version of cox model
+m1 <- coxme(formula = Surv(time1, time2, stop_pollinating) ~  treatment  + (1|BeeNumCol),
+            data = timeDF2)
+summary(m1)
+anova(m1) # old version of analysis
 
 
-# cox model
-m1 <- coxph(formula = Surv(time1, time2, death_) ~  pollenR2, data = timeDF2)
+m1 <- coxph(formula = Surv(time1, time2, stop_pollinating) ~ pollenR2 + hive,
+            data = timeDF2)
+summary(m1)
+anova(m1) # old version of analysis
+
+
+# new version of model
+m1 <- coxme(formula = Surv(time1, time2, stop_pollinating) ~ treatment + IT_mm +  pollenR2 + hive + (1|BeeNumCol),
+            data = timeDF2)
 summary(m1)
 
-m2 <- coxph(formula = Surv(time1, time2, death_) ~  treatment + pollenR2, data = timeDF2)
+m11<- coxme(formula = Surv(time1, time2, stop_pollinating) ~ treatment +   pollenR2 + hive+ (1|BeeNumCol),
+            data = timeDF2)
 
-anova(m1, m2)
+anova(m1,m11) # IT doesn't improve model
+
+m12 <- coxme(formula = Surv(time1, time2, stop_pollinating) ~   pollenR2  + hive+ (1|BeeNumCol),
+            data = timeDF2)
+
+summary(m12)
+anova(m12) # # new version of analysis, final for paper
 
 
 
-# create survival object
-lastObs$survObj <- with(lastObs, Surv(index, status == 2))
-head(lastObs)
+
+
+exp(0.8923705) # interpret coefficient for hive 7
+
+exp(0.8730445)
+
+# refit model for hive 8
+timeDF3 <- timeDF2 %>%
+  mutate(hive = relevel(as.factor(.$hive), ref = "8"), 
+         pollenR2 = relevel(as.factor(.$pollenR2), ref = "TRUE"))
+m13 <- coxme(formula = Surv(time1, time2, stop_pollinating) ~   hive+pollenR2  + (1|BeeNumCol),
+            data = timeDF3)
+
+summary(m13)
+
+preds = predict(m13, re.form = NA)
+
+ggplot(timeDF3, aes(x = timeDF3$hive, y = (preds))) + 
+         geom_point(position = position_jitter())
+
+
+# refit model to be able to test proportional hazard assumption
+m2 <- coxph(formula = Surv(time1, time2, stop_pollinating) ~  pollenR2 + hive+  frailty(BeeNumCol),
+            data = timeDF2)
+
+# test proportional hazard assumption
+(testph <- cox.zph(m2, transform = 'log')) # no evidence that prop haz assumption is violated
+plot(testph)
 
 
 
 ## Kaplan-Meier estimator. 
-lastObs$Treatment <- mapvalues(lastObs$treatment, from = c("RewFir", "RewSec"), to = c("Reward -> No Reward", "No Reward -> Reward"))
+timeDF2$treatment <- mapvalues(timeDF2$treatment, from = c("RewFir", "RewSec"), to = c("Reward -> No Reward", "No Reward -> Reward"))
 
-km.as.one <- survfit(survObj ~ 1, data = lastObs, conf.type = "log-log")
-km.by.trt <- survfit(Surv(time1, time2, death_) ~ treatment, data = timeDF2, conf.type = "log-log")
+km.as.one <- survfit(survObj ~ 1, data = timeDF2, conf.type = "log-log")
+km.by.trt <- survfit(Surv(time1, time2, stop_pollinating) ~ treatment + hive, data = timeDF2, conf.type = "log-log")
 
-s1 <- coxph(survObj ~ 1, data = lastObs) 
-s2 <- coxph(survObj ~ Treatment, data = lastObs) 
-s2
-anova(s1, s2)
-
-s3 <- coxph(survObj ~ Treatment + unlist(IT_mm), data = lastObs) 
-summary(s3) # IT not important in Cox model
-
-
-s4 <- coxph(survObj ~ Treatment + unlist(IT_mm), data = lastObs) 
-
-
-s3 <- coxph(survObj ~ I(lastObs$visitNum > 50), data = lastObs) 
-
-# test proportional hazard assumption
-testph <- cox.zph(s2) # no evidence that prop haz assumption is violated
-ggcoxzph(testph)
-
-
-par(mfrow = c(1,1))
-plot(km.by.trt)
-
-
-# refref: censor not right
-# refref: plot not right.
-gsv <- ggsurvplot(km.by.trt, CI = FALSE) 
+gsv <- ggsurvplot(survfit(Surv(time1, time2, stop_pollinating) ~ treatment + hive, data = timeDF2, conf.type = "log-log")) 
 
 gsv
 
-gsv$plot + facet_wrap(~treatment) + 
+gsv$plot + facet_wrap(~treatment + hive) + 
      theme_bw()   + 
     theme(panel.grid.major = element_line(colour = "grey50", size = 0.1), 
           panel.grid.minor = element_line(colour = "grey50", size = 0.1), 
@@ -260,17 +292,41 @@ gsv$plot + facet_wrap(~treatment) +
 ggsave(file.path(figDir, "beeSonicationPercentage.svg"), width = 5, height = 3)
 
 
-ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4"), plot.cens = FALSE) + 
-     ylim(c(0, 1)) + 
+timeDF2 <- timeDF2 %>%
+  mutate(Colony = hive) %>%
+  mutate(Colony = as.character(Colony)) %>%
+  mutate(Colony = recode(.$Colony, "7" = "4", 
+                         "8" =  "5"))
+timeDF2
+
+gsv <- ggsurvplot(survfit(Surv(time1, time2, stop_pollinating) ~ treatment + Colony, data = timeDF2, conf.type = "log-log"), censor = FALSE,
+                  legend.labs = c("Reward -> No Reward", "Reward -> No Reward", "No Reward -> Reward", "No Reward -> Reward")) 
+
+gsv
+
+dd = gsv$data.survplot
+
+dd$treatment
+
+ggplot(dd, aes(x = time, y = surv, color = treatment)) + 
+  facet_wrap(~  Colony, labeller = "label_both") + 
+  geom_step(size = 1.1) + 
+  theme(panel.grid.major = element_line(colour = "grey50", size = 0.1), 
+          panel.grid.minor = element_line(colour = "grey50", size = 0.1), 
+          strip.background =element_rect(fill="white"))+
+     theme(legend.title = element_blank(), 
+           panel.grid.major = element_blank(), 
+           panel.grid.minor = element_blank(), 
+           legend.position = c(0.76,0.9), legend.background = element_rect(fill = 'grey95'), 
+           text = element_text(color = "black", size = 12), 
+           axis.text = element_text(color = "black", size = 12))  + 
+     scale_color_viridis(discrete = TRUE, begin = 0.3, end = 0.7, option = "magma")  + 
      xlab("Sonication Number") + 
-     ylab("Cumulative Proportion Sonicating") + 
-  theme(legend.position = c(0.75, 0.86), 
-        legend.background = element_rect(fill = 'grey95')) + 
-  geom_vline(aes(xintercept = 50), lty = 2, lwd = 0.2)
-
-ggsave(file.path(figDir, "beeSonicationPercentage_onePlot.svg"), width = 5, height = 3.5)
-
-xtabs(~lastObs$treatment + as.character(lastObs$hive))
+     ylab("Cumulative Proportion Sonicating")  + 
+  geom_segment(aes(x=50,xend=50,y=0,yend=1), lty = 2, color= 'black')
+  
+ggsave(file.path(figDir, "beeSonicationPercentage_onePlot_twoHives.svg"), width = 8, height = 5)
+ggsave(file.path(figDir, "beeSonicationPercentage_onePlot_twoHives.png"), units = "in", dpi = 500, width = 8, height = 5)
 
 ```
 
@@ -527,8 +583,8 @@ plot(finmod)
 qqnorm(ranef(finmod)$beeID[[1]])
 qqline(ranef(finmod)$beeID[[1]])
 
-sjp.lmer(finmod, type = "re", sort = TRUE) # plot random effects to find any outliers
-sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+##sjp.lmer(finmod, type = "re", sort = TRUE) # plot random effects to find any outliers
+##sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 
 
 # look at model without interaction
