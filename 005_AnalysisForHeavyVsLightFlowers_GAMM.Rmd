@@ -43,8 +43,9 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", "plyr", "effects", "gamm4", "viridis", 
-              "cowplot")
+packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', 
+              "multcomp", "plyr", "effects", "gamm4", "viridis", 
+              "cowplot", "tidyverse")
 ipak(packages)
 
 # set ggplot theme
@@ -157,6 +158,26 @@ ggplot(ampLong, aes(x = trt, y = amp)) +
 #ggsave(file.path(figDir, 'heavyLightAmp.pdf'), width = 5, heigh = 4)
 
 nrow(ampLong)
+
+
+
+# get sample size info
+summdf <- new_df %>%
+  group_by(beeID, treatment) %>%
+  summarize(id_count = n())
+
+
+sum(summdf$id_count)
+length(unique(summdf$beeID))
+nrow(summdf)
+
+hist(summdf$id_count)
+
+summdf[summdf$id_count < 10, ]
+
+summdf[summdf$beeID == "6", ]
+
+
 ```
 
 

@@ -230,6 +230,93 @@ tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, FUN = function(x)
 # total number of trials that were unrewarded per treatment
 tapply((grepl("[tT]", as.character(sl$rewTF))), INDEX= sl$trt, FUN = function(x) sum(!x))
 
+
+# plot bee size in the groups
+sl_sum <- sl %>%
+  dplyr::select(beeCol, trt2, IT_imputed) %>%
+  distinct(beeCol, trt2, .keep_all = TRUE) 
+
+sl_sum %>% print(n = 50)
+
+sl_sum %>%
+  group_by(trt2) %>%
+  summarize(counts = n())
+
+sl %>% nrow
+
+sl %>% group_by(beeCol) %>%
+  summarize(n()) %>%
+  nrow()
+
+
+
+sl %>% group_by(trt2) %>%
+  summarize(count= n())
+
+sl_sum %>% group_by(trt2) %>%
+  summarize(count= n())
+
+s2 <- sl_sum  %>%
+  filter(trt2 != "full")
+
+s2 <- s2 %>%
+  mutate(trt3 = plyr::mapvalues(.$trt2, from = c("full_2", "high", "low"), 
+                        to = c("Full range\n(220 - 450 Hz)", 
+                               "High range\n(340 - 390 Hz)", 
+                               "Low range\n(220 - 330 Hz)")))
+
+set.seed(123)
+ggplot(s2, aes(x = trt3,  y= IT_imputed)) + 
+  geom_violin(width = 0.5, fill = "grey90", color = NA, bw = 0.2, trim = TRUE) + 
+  #geom_boxplot(width = 0.5, outlier.alpha =   0) + 
+  geom_point(position = position_jitter(height = 0, width = 0.05), 
+             stroke= 0, size = 2.5, color = 'grey40') + 
+  labs(x = "Frequency range for reward", y = "Intertegular span (mm)") 
+  
+ggsave(file.path(figDir, "beeSize_exp1.png"), width = 6, height = 4, units = "in", dpi = 500)
+ggsave(file.path(figDir, "beeSize_exp1.svg"), width = 6, height = 4, units = "in")
+
+
+# plot freq vs. amp
+sl <- sl %>%
+  mutate(`IT interval (mm)` = cut_interval(IT_imputed, n = 3))
+
+ggplot(sl[sl$trt2 == "full", ], aes(x = freq, y = amp_acc2)) + 
+  geom_point(position = position_jitter(height = 0, width = 2), 
+             alpha = 0.3, stroke = 0, size = 1.5) + 
+  stat_smooth(method = 'loess', span = 1, color = 'grey40', se = FALSE, 
+              lwd = 2) + 
+  facet_wrap(~`IT interval (mm)`, labeller = "label_both") + 
+  theme(strip.background = element_blank(), 
+        strip.text = element_text(size = 13)) + 
+  theme(legend.position = "none", 
+        plot.margin = unit(c(1,1,1,1)/2, "cm")) + 
+  labs(x = "Sonication Frequency (Hz)", y = expression ("Sonication amplitude   " (m~s^{-2})))
+
+
+ggsave(file.path(figDir, "freq_amp.png"), width = 8, height = 4, units = "in", dpi = 500)
+ggsave(file.path(figDir, "freq_amp.svg"), width = 8, height = 4, units = "in")
+
+
+# library(plotly)
+# 
+# p <- plot_ly(sl[sl$trt2 == "full", ], x = ~freq, y = ~IT_imputed, z = ~amp_acc2,
+#         marker = list(color = ~amp_acc2, colorscale = c('#FFE1A1', '#683531'), showscale = TRUE)) %>%
+#   add_markers() %>%
+#   layout(scene = list(xaxis = list(title = 'freq'),
+#                      yaxis = list(title = 'size'),
+#                      zaxis = list(title = 'accel')),
+#          annotations = list(
+#            x = 1.13,
+#            y = 1.05,
+#            text = 'accel',
+#            xref = 'paper',
+#            yref = 'paper',
+#            showarrow = FALSE
+#          ))
+# 
+# p
+
 ```
 
 
