@@ -296,27 +296,6 @@ ggplot(sl[sl$trt2 == "full", ], aes(x = freq, y = amp_acc2)) +
 
 ggsave(file.path(figDir, "freq_amp.png"), width = 8, height = 4, units = "in", dpi = 500)
 ggsave(file.path(figDir, "freq_amp.svg"), width = 8, height = 4, units = "in")
-
-
-# library(plotly)
-# 
-# p <- plot_ly(sl[sl$trt2 == "full", ], x = ~freq, y = ~IT_imputed, z = ~amp_acc2,
-#         marker = list(color = ~amp_acc2, colorscale = c('#FFE1A1', '#683531'), showscale = TRUE)) %>%
-#   add_markers() %>%
-#   layout(scene = list(xaxis = list(title = 'freq'),
-#                      yaxis = list(title = 'size'),
-#                      zaxis = list(title = 'accel')),
-#          annotations = list(
-#            x = 1.13,
-#            y = 1.05,
-#            text = 'accel',
-#            xref = 'paper',
-#            yref = 'paper',
-#            showarrow = FALSE
-#          ))
-# 
-# p
-
 ```
 
 
@@ -396,8 +375,8 @@ plot(m3)
 qqnorm(ranef(m3)$beeColHive[[1]])
 qqline(ranef(m3)$beeColHive[[1]])
 
-sjp.lmer(m3) # plot random effects to find any outliers
-sjp.lmer(m3, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+plot_model(m3) # plot random effects to find any outliers
+#sjp.lmer(m3, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 
 
 # post-hoc tests -- pvals for paper
@@ -412,7 +391,8 @@ summary(glht(m3, linfct = mcp(trt2 = "Tukey")), test = adjusted("bonf"))
 ```{r bootstrap, cache = TRUE}
 
 # set number of bootstrap samples
-nbootSims = 100
+# refref: change to 10K before knitting
+nbootSims = 10
 
 ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
 print(ITmean)
