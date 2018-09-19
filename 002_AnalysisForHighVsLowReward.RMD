@@ -79,19 +79,22 @@ sl <- read_csv(file.path(dataDir, '01_CombinedTrials_cleaned.csv'))
 colnames(sl)
 
 
-
-
 sl <- sl %>%
   # gets rid of the copious warnings
   mutate(timeSinceStart = NA, timeSinceLastBuzz = NA, buzzesSinceReward = NA) %>%
   # make sure all bee colors are lowercase
   mutate(beeCol =  tolower(beeCol)) %>%
+  
+  # fix orange.5, which should be orange.3
+  mutate(hive = ifelse(hive == "5" & beeCol == "orange", "3", hive)) %>%
   # color + hive is an ID var 
   mutate(beeColHive = interaction(beeCol, hive), 
          colNum = paste(beeCol, hive, sep = "_")) %>%
   # remove two trials I messed up
   filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
   filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
+  
+
   # convert hive to factor
   mutate(hive = as.factor(hive),
          trt2  = ifelse(trt == 'full' & trialNum > 1, "full_2", as.character(trt)), 
@@ -114,10 +117,7 @@ initialFreqAmp <- sl %>%
   dplyr::select(beeColHive, trialNum, freqDiff, ampDiff, 
                 IT_imputed, rewTF, trt, hive, trt2, 
                 freq, amp_acc2, trialNum0, initialFreq, initialAmp2) 
-  
 
-initialFreqAmp
-  
 
 # calculate proportion of rewards by trt
 prop.table(xtabs(~ initialFreqAmp$rewTF + initialFreqAmp$trt), margin = 2)
@@ -272,6 +272,10 @@ sl %>% nrow
 sl %>% group_by(beeColHive) %>%
   summarize(n()) %>%
   nrow()
+
+print(unique(sl$beeColHive))
+
+print(unique(sl$beeCol))
 
 
 
@@ -459,11 +463,13 @@ s2
 s44 %>% print(n = Inf)
 
 
-
+set.seed(1234)
 g0 <- ggplot(pframe, aes(x=IT_imputed, y=predMean, color = trt3, fill = trt3))+
         geom_line()+
         facet_wrap(~trt3) + 
-        geom_rug(data = s44, aes(x = IT_imputed, color = trt3), inherit.aes = FALSE, sides = "b") + 
+        geom_rug(data = s44, aes(x = IT_imputed, color = trt3, y = s44$mean_freq), 
+                 inherit.aes = FALSE, sides = "b", 
+                 position = position_jitter(height = 0, width = 0.03)) + 
         labs(y = "Sonication frequency (Hz)", x = "Intertegular Span (mm)") + 
         geom_ribbon(aes(ymin = blo, ymax = bhi), alpha = 0.3, color = NA)+
         # geom_point(data = s44, aes(y= mean_freq)) +
@@ -846,19 +852,26 @@ sl <- sl %>%
   mutate(timeSinceStart = NA, timeSinceLastBuzz = NA, buzzesSinceReward = NA) %>%
   # make sure all bee colors are lowercase
   mutate(beeCol =  tolower(beeCol)) %>%
+  
+  # fix orange.5, which should be orange.3
+  mutate(hive = ifelse(hive == "5" & beeCol == "orange", "3", hive)) %>%
   # color + hive is an ID var 
   mutate(beeColHive = interaction(beeCol, hive), 
          colNum = paste(beeCol, hive, sep = "_")) %>%
   # remove two trials I messed up
   filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
   filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
+  
+
   # convert hive to factor
   mutate(hive = as.factor(hive),
-         trt2  = ifelse(trt == 'full' & trialNum > 1, "full_2", as.character(trt)), 
+         trt2  = ifelse(trt == 'full' & trialNum > 1, 
+                        "full_2", as.character(trt)), 
          trt = relevel(factor(trt), ref = "full")) %>%
   # divide amplitud by 2
   mutate(amp_acc2 = amp_acc / 2) %>%
   mutate(trialNum0 = trialNum - 1)
+
 
 
 # interaction model
