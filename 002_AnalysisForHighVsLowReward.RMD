@@ -762,7 +762,7 @@ cc %>% print(n = Inf)
 
 fta <- fta %>%
   mutate(beeColHive = factor(beeColHive, levels = bb$beeColHive), 
-       t5 = mapvalues(.$trt, from = c("full", "high", "low"), 
+       t5 = plyr::mapvalues(.$trt, from = c("full", "high", "low"), 
                         to = c("Full range\n(220 - 450 Hz)", 
                                "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))) %>%
   filter(trialNum <= 10)
@@ -950,7 +950,7 @@ bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe$blo<-exp(bb2_se[1,])
 pframe$bhi<-exp(bb2_se[2,])
 pframe$predMean <- pp
-pframe <- pframe[, c('trt2', "blo", "bhi", "predMean")]
+pframe <- pframe[, c('trt', "blo", "bhi", "predMean")]
 pframe
 ```
 
@@ -1178,7 +1178,7 @@ ggplot(sl, aes(x = trt2, y = IT_imputed)) +
 
 
 ## analyze time between buzzes and num buzzes between rewards
-```{r}
+```{r, eval = FALSE}
 # convert time to datetime format
 
 # fresh dataset
@@ -1231,7 +1231,7 @@ trialStart <- sl %>%
 trialStart <- trialStart %>%
   ungroup() %>%
   mutate(beeColHive = factor(beeColHive, levels = bb$beeColHive), 
-       t5 = mapvalues(.$trt, from = c("full", "high", "low"), 
+       t5 = plyr::mapvalues(.$trt, from = c("full", "high", "low"), 
                         to = c("Full range\n(220 - 450 Hz)", 
                                "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))) %>%
   filter(trialNum <= 10)
