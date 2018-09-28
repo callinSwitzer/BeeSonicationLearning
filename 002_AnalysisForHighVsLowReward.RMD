@@ -418,7 +418,7 @@ summary(glht(m3, linfct = mcp(trt = "Tukey")), test = adjusted("bonf"))
 
 # set number of bootstrap samples
 # refref: change to 10K before knitting
-nbootSims = 1000
+nbootSims = 10
 
 ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
 print(ITmean)
