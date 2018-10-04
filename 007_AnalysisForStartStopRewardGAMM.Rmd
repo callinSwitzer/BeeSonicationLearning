@@ -371,6 +371,21 @@ hist(beeAvgs$buzzDiff)
 # start with gamm so I can show change by visit number
 
 #                          s(visitNum_centered, by = trt2) +  trt2 + IT_mm*treatment_rewarded + hive , random =  ~(1|beeID)
+
+
+g000 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2) + trt2*treatment_rewarded + treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
+par(mfrow = c(2,3))
+aab <- plot(g000$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g000$gam) 
+summary(g000$mer)
+dev.off()
+
+summary(g000$mer)
+summary(g000$gam) # no interaction of trt and trt order
+
+
+
+
 g00 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2) + trt2 + treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
 par(mfrow = c(2,3))
 aab <- plot(g00$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
