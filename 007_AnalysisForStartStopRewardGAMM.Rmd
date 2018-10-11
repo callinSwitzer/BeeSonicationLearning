@@ -36,9 +36,9 @@ ipak <- function(pkg){
      sapply(pkg, require, character.only = TRUE)
 }
 
-packages <- c("ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", 
+packages <- c("tidyverse", "ggplot2", "reshape2", 'lme4', 'sjPlot', "multcomp", 
               "plyr", "effects", "viridis", "GGally", "survminer", 
-              "tidyr","gamm4", "cowplot")
+              "tidyr","gamm4", "cowplot", "coxme")
 ipak(packages)
 
 # define data and figure directories
@@ -77,9 +77,16 @@ bees$amp_acc <- bees$amp_acc/2
 # to make sure it agrees with what is already in the dataframe
 tapply(bees$freq, INDEX = list(bees$beeID, bees$treatment_rewarded), mean)
 
+
 # number of bees -- should be 96
 length(unique(bees$BeeNumCol))
 
+
+# num bees per colony
+bees %>%
+  dplyr::select(BeeNumCol, hive) %>%
+  distinct() %>%
+  summarize(numHive = count(hive))
 
 # number of buzzes per bee
 xtabs(~bees$BeeNumCol)
@@ -97,7 +104,18 @@ apply(table(bees$BeeNumCol, bees$treatment), MARGIN = 2, nzmean)
 
 # num observations -- should be 5851
 nrow(bees)
+
+
+# calculate num of buzzes in each treatment
+xtabs(~bees$treatment)
+length(unique(bees$beeID[bees$treatment == "RewFir"]))
+length(unique(bees$beeID[bees$treatment == "RewSec"]))
+
 ```
+
+
+Time dependent: https://cran.r-project.org/web/packages/survival/vignettes/timedep.pdf
+
 
 ## Visualize data
 ```{r}
@@ -134,43 +152,133 @@ lastObs$index <- as.numeric(lastObs$visitNum)
 # 1 = censored, 2 = stopped buzzing for 5 min
 lastObs$status <- mapvalues(lastObs$index == 100, from = c(TRUE, FALSE), to = c(1, 2))
 
-# create survival object
-lastObs$survObj <- with(lastObs, Surv(index, status == 2))
-head(lastObs)
+lastObs2 <- lastObs %>%
+  dplyr::select(BeeNumCol, treatment, index) %>%
+  mutate(treatment = as.factor(unlist(.$treatment)))
 
-lastObs$treatment <- as.factor(unlist(lastObs$treatment))
+lastObs2
+
+# reshape to add time-dependent covariate
+# subject, time1, time2, death, covariate (rewarded)
+
+timeDF <- as.tbl(bees) %>%
+  dplyr::select(BeeNumCol, treatment, treatment_rewarded, visitNum, IT_mm, hive) %>%
+  mutate(pollenReward = recode(treatment_rewarded, 
+                " T"  = TRUE, 
+                " F" = FALSE)) %>%
+  dplyr::select(-treatment_rewarded) %>%
+  group_by(BeeNumCol, pollenReward) %>%
+  filter(visitNum == max(visitNum) | visitNum == min(visitNum)) %>%
+  
+  group_by(BeeNumCol) 
+
+
+timeMax = timeDF %>%
+  filter(visitNum == max(visitNum)) %>%
+  mutate(censor = recode(visitNum, `100` = "censor", 
+                         .default = "give up"))
+
+timeDF <- timeDF %>%
+  full_join(timeMax) %>%
+  mutate(censor = replace_na(.$censor, replace = 0))
+
+timeDF2 = timeDF %>%
+  mutate(time1 = visitNum,
+    time2 = lead(visitNum, 1), 
+    censor2 = lead(censor), 
+    pollenR2 = lead(pollenReward)) %>%
+  filter(time2 != 1) %>%
+  dplyr::select(-censor) %>%
+  filter(time2 != 51) %>%
+  dplyr::select(c(-pollenReward, -visitNum)) %>%
+  mutate(stop_pollinating = (censor2 == "give up")*1, 
+         censor2 = (censor2 == "censor")*1) %>%
+  mutate(time1 = replace(time1, time1 == 51, 50)) %>%
+  mutate(survObj = Surv(.$time1, .$time2, .$stop_pollinating))
+
+timeDF2 %>% arrange(desc(treatment)) %>% print(n = 50)
+timeDF2 <- timeDF2 %>%
+  mutate(treatment = as.factor(treatment), 
+         pollenR2 = as.factor(pollenR2), 
+         hive = as.factor(hive))
+
+table(timeDF2$treatment)
+sum(timeDF2$stop_pollinating) # num that stopped
+length(unique(timeDF2$BeeNumCol)) # total num of bees
+
+# Old version of cox model
+m1 <- coxme(formula = Surv(time1, time2, stop_pollinating) ~  treatment  + (1|BeeNumCol),
+            data = timeDF2)
+summary(m1)
+anova(m1) # old version of analysis
+
+
+m1 <- coxph(formula = Surv(time1, time2, stop_pollinating) ~ pollenR2 + hive,
+            data = timeDF2)
+summary(m1)
+anova(m1) # old version of analysis
+
+
+# new version of model
+m1 <- coxme(formula = Surv(time1, time2, stop_pollinating) ~ treatment + IT_mm +  pollenR2 + hive + (1|BeeNumCol),
+            data = timeDF2)
+summary(m1)
+
+m11<- coxme(formula = Surv(time1, time2, stop_pollinating) ~ treatment +   pollenR2 + hive+ (1|BeeNumCol),
+            data = timeDF2)
+
+anova(m1,m11) # IT doesn't improve model
+
+m12 <- coxme(formula = Surv(time1, time2, stop_pollinating) ~   pollenR2  + hive+ (1|BeeNumCol),
+            data = timeDF2)
+
+summary(m12)
+anova(m12) # # new version of analysis, final for paper
+
+
+
+
+
+exp(0.8923705) # interpret coefficient for hive 7
+
+exp(0.8730445)
+
+# refit model for hive 8
+timeDF3 <- timeDF2 %>%
+  mutate(hive = relevel(as.factor(.$hive), ref = "8"), 
+         pollenR2 = relevel(as.factor(.$pollenR2), ref = "TRUE"))
+m13 <- coxme(formula = Surv(time1, time2, stop_pollinating) ~   hive+pollenR2  + (1|BeeNumCol),
+            data = timeDF3)
+
+summary(m13)
+
+preds = predict(m13, re.form = NA)
+
+ggplot(timeDF3, aes(x = timeDF3$hive, y = (preds))) + 
+         geom_point(position = position_jitter())
+
+
+# refit model to be able to test proportional hazard assumption
+m2 <- coxph(formula = Surv(time1, time2, stop_pollinating) ~  pollenR2 + hive+  frailty(BeeNumCol),
+            data = timeDF2)
+
+# test proportional hazard assumption
+(testph <- cox.zph(m2, transform = 'log')) # no evidence that prop haz assumption is violated
+plot(testph)
+
 
 
 ## Kaplan-Meier estimator. 
-lastObs$Treatment <- mapvalues(lastObs$treatment, from = c("RewFir", "RewSec"), to = c("Reward -> No Reward", "No Reward -> Reward"))
+timeDF2$treatment <- mapvalues(timeDF2$treatment, from = c("RewFir", "RewSec"), to = c("Reward -> No Reward", "No Reward -> Reward"))
 
-km.as.one <- survfit(survObj ~ 1, data = lastObs, conf.type = "log-log")
-km.by.trt <- survfit(survObj ~ Treatment, data = lastObs, conf.type = "log-log")
+km.as.one <- survfit(survObj ~ 1, data = timeDF2, conf.type = "log-log")
+km.by.trt <- survfit(Surv(time1, time2, stop_pollinating) ~ treatment + hive, data = timeDF2, conf.type = "log-log")
 
-s1 <- coxph(survObj ~ 1, data = lastObs) 
-s2 <- coxph(survObj ~ Treatment, data = lastObs) 
-s2
-anova(s1, s2)
+gsv <- ggsurvplot(survfit(Surv(time1, time2, stop_pollinating) ~ treatment + hive, data = timeDF2, conf.type = "log-log")) 
 
-s3 <- coxph(survObj ~ Treatment + unlist(IT_mm), data = lastObs) 
-summary(s3) # IT not important in Cox model
+gsv
 
-
-
-s3 <- coxph(survObj ~ I(lastObs$visitNum > 50), data = lastObs) 
-
-# test proportional hazard assumption
-testph <- cox.zph(s2) # no evidence that prop haz assumption is violated
-ggcoxzph(testph)
-
-
-par(mfrow = c(1,1))
-plot(km.by.trt)
-
-gsv <- ggsurvplot(km.by.trt, CI = FALSE) 
-
-
-gsv$plot + facet_wrap(~Treatment) + 
+gsv$plot + facet_wrap(~treatment + hive) + 
      theme_bw()   + 
     theme(panel.grid.major = element_line(colour = "grey50", size = 0.1), 
           panel.grid.minor = element_line(colour = "grey50", size = 0.1), 
@@ -184,17 +292,47 @@ gsv$plot + facet_wrap(~Treatment) +
 ggsave(file.path(figDir, "beeSonicationPercentage.svg"), width = 5, height = 3)
 
 
-ggsurv(km.by.trt, CI = FALSE, surv.col = c("#a6cee3", "#1f78b4"), plot.cens = FALSE) + 
-     ylim(c(0, 1)) + 
+timeDF2 <- timeDF2 %>%
+  mutate(Colony = hive) %>%
+  mutate(Colony = as.character(Colony)) %>%
+  mutate(Colony = recode(.$Colony, "7" = "4", 
+                         "8" =  "5"))
+timeDF2
+
+gsv <- ggsurvplot(survfit(Surv(time1, time2, stop_pollinating) ~ treatment + Colony, data = timeDF2, conf.type = "log-log"), censor = FALSE,
+                  legend.labs = c("Reward -> No Reward", "Reward -> No Reward", "No Reward -> Reward", "No Reward -> Reward")) 
+
+gsv
+
+dd = gsv$data.survplot
+
+dd$treatment
+
+ggplot(dd, aes(x = time, y = surv, color = treatment)) + 
+  facet_wrap(~  Colony, labeller = "label_both") + 
+  theme_classic() + 
+  geom_step(size = 1.1) + 
+  theme(strip.background = element_rect(fill = NA, color = "white"), 
+        strip.text.x = element_text(margin = margin(0.1,0,0.1,0, "cm")))+
+  theme(panel.border = element_blank()) + 
+     theme(legend.title = element_blank(),
+           panel.grid.major = element_blank(),
+           panel.grid.minor = element_blank(),
+           legend.position = c(0.24, 0.19),
+           legend.background = element_rect(fill = 'grey95'),
+           text = element_text(color = "black", size = 12),
+           legend.direction = "vertical",
+           axis.text = element_text(color = "black", size = 12), 
+           panel.spacing = unit(0.5, "lines"))  +
+     scale_color_viridis(discrete = TRUE, begin = 0.3, end = 0.7, option = "magma")  +
      xlab("Sonication Number") + 
-     ylab("Cumulative Proportion Sonicating") + 
-  theme(legend.position = c(0.75, 0.86), 
-        legend.background = element_rect(fill = 'grey95')) + 
-  geom_vline(aes(xintercept = 50), lty = 2, lwd = 0.2)
-
-ggsave(file.path(figDir, "beeSonicationPercentage_onePlot.svg"), width = 5, height = 3.5)
-
-xtabs(~lastObs$treatment + as.character(lastObs$hive))
+     ylab("Cumulative Proportion Sonicating")  + 
+  
+  geom_segment(aes(x=50,xend=50,y=0,yend=1), lty = 2, color= 'black')
+  
+ggsave(file.path(figDir, "beeSonicationPercentage_onePlot_twoHives.svg"), width = 5.5, height = 4)
+ggsave(file.path(figDir, "beeSonicationPercentage_onePlot_twoHives.png"), units = "in", dpi = 500, 
+       width = 5.5, height = 4)
 
 ```
 
@@ -233,6 +371,21 @@ hist(beeAvgs$buzzDiff)
 # start with gamm so I can show change by visit number
 
 #                          s(visitNum_centered, by = trt2) +  trt2 + IT_mm*treatment_rewarded + hive , random =  ~(1|beeID)
+
+
+g000 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2) + trt2*treatment_rewarded + treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
+par(mfrow = c(2,3))
+aab <- plot(g000$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g000$gam) 
+summary(g000$mer)
+dev.off()
+
+summary(g000$mer)
+summary(g000$gam) # no interaction of trt and trt order
+
+
+
+
 g00 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2) + trt2 + treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
 par(mfrow = c(2,3))
 aab <- plot(g00$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
@@ -451,8 +604,8 @@ plot(finmod)
 qqnorm(ranef(finmod)$beeID[[1]])
 qqline(ranef(finmod)$beeID[[1]])
 
-sjp.lmer(finmod, type = "re", sort = TRUE) # plot random effects to find any outliers
-sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
+##sjp.lmer(finmod, type = "re", sort = TRUE) # plot random effects to find any outliers
+##sjp.lmer(finmod, type = 'fe', sort = TRUE, p.kr = FALSE) # plot fixed effects
 
 
 # look at model without interaction
@@ -608,7 +761,8 @@ ggsave(plot = freqPlotIT_oneHIve, filename = file.path(figDir, "StartStopBootFre
 ```{r}
 
 p1 <- Fig31 + xlab("") + theme(legend.position = "none", 
-                               strip.background = element_blank(), 
+                               strip.background = element_rect(color = NA), 
+                               strip.text.x = element_text(margin = margin(0.2,0,0.2,0, "cm")), 
                                axis.text.x=element_blank(), 
                                axis.ticks.x=element_blank()) + 
             labs(y = "Sonication frequency (Hz)") 
