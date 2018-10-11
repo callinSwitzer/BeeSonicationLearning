@@ -113,7 +113,6 @@ sl <- sl %>%
   arrange(beeColHive, continuousCount) %>%
   mutate(cumAvgFreq = cumFreq / continuousCount)
   
-sl  
 
 
 
@@ -121,7 +120,7 @@ ggplot(sl[sl$trialNum == 2,], aes(x = continuousCount, y = cumAvgFreq, color = t
   geom_point() + 
   facet_wrap(~beeColHive) + 
   scale_x_log10() + 
-  scale_y_log10() + 
+  scale_y_log10(breaks = c(280, 300, 320, 340, 360)) + 
   stat_smooth(method = "lm") + 
   scale_color_viridis_d(name = "Treatment")
 
