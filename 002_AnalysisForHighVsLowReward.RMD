@@ -426,7 +426,8 @@ summary(glht(m3, linfct = mcp(trt = "Tukey")), test = adjusted("bonf"))
 
 # set number of bootstrap samples
 # refref: change to 10K before knitting
-nbootSims = 10000
+# refref time this
+nbootSims = 1000 # ~ 80 minutes on Macbook pro for 10K bootstrap samples, 8min for 1k samples
 
 ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
 print(ITmean)
@@ -441,7 +442,10 @@ pp <- predict(m3, newdata = pframe, re.form=NA, type = 'response') # re.form set
 
 
 ### Calculate CI's (using bootstrap, not accounting for random effects)
-bb2 <- bootMer(m3, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims)
+system.time({
+  bb2 <- bootMer(m3, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims)
+})
+
 print(paste("Number of bootstrap samples", nrow(bb2$t)))
 bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe$blo<-bb2_se[1,]
@@ -899,21 +903,21 @@ sl <- sl %>%
   mutate(timeSinceStart = NA, timeSinceLastBuzz = NA, buzzesSinceReward = NA) %>%
   # make sure all bee colors are lowercase
   mutate(beeCol =  tolower(beeCol)) %>%
-  
+
   # fix orange.5, which should be orange.3
   mutate(hive = ifelse(hive == "5" & beeCol == "orange", "3", hive)) %>%
-  # color + hive is an ID var 
-  mutate(beeColHive = interaction(beeCol, hive), 
+  # color + hive is an ID var
+  mutate(beeColHive = interaction(beeCol, hive),
          colNum = paste(beeCol, hive, sep = "_")) %>%
   # remove two trials I messed up
   filter(!(beeCol == "whitepink" & trialNum == 3)) %>%
   filter(!(beeCol == "limepurple" & trialNum == 3)) %>%
-  
+
 
   # convert hive to factor
   mutate(hive = as.factor(hive),
-         trt2  = ifelse(trt == 'full' & trialNum > 1, 
-                        "full_2", as.character(trt)), 
+         trt2  = ifelse(trt == 'full' & trialNum > 1,
+                        "full_2", as.character(trt)),
          trt = relevel(factor(trt), ref = "full")) %>%
   # divide amplitud by 2
   mutate(amp_acc2 = amp_acc / 2) %>%
@@ -979,68 +983,71 @@ summary(glht(m13, linfct = mcp(trt = "Tukey")), test = adjusted("bonf"))
 ### Generate CI's for acceleration
 
 ```{r bootstrapAmp, cache = TRUE, eval = FALSE}
-# set number of bootstrap samples
-nbootSims2 = 10000
-
-sl$trt
-
-# don't need to include hive, but will set trialNum to 2
-pframe <- data.frame(trt = levels((sl$trt)), 
-                     IT_imputed = ITmean,  colNum = 99999, trialNum = 2)
-pframe$amp_acc <- 0
-# exponentiate to get back to original scale
-pp <- exp(predict(m13, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
-
-
-### Calculate CI's (using bootstrap, not accounting for random effects)
-bb2 <- bootMer(m13, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
-print(paste("Number of bootstrap samples", nrow(bb2$t)))
-bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
-
-#exponentiate to get back to orignal scale
-pframe$blo<-exp(bb2_se[1,])
-pframe$bhi<-exp(bb2_se[2,])
-pframe$predMean <- pp
-pframe <- pframe[, c('trt', "blo", "bhi", "predMean")]
-pframe
+# # set number of bootstrap samples
+# nbootSims2 = 1000
+# 
+# sl$trt
+# 
+# # don't need to include hive, but will set trialNum to 2
+# pframe <- data.frame(trt = levels((sl$trt)), 
+#                      IT_imputed = ITmean,  colNum = 99999, trialNum = 2)
+# pframe$amp_acc <- 0
+# # exponentiate to get back to original scale
+# pp <- exp(predict(m13, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
+# 
+# 
+# ### Calculate CI's (using bootstrap, not accounting for random effects)
+# system.time({
+#   bb2 <- bootMer(m13, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+# })
+# 
+# print(paste("Number of bootstrap samples", nrow(bb2$t)))
+# bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
+# 
+# #exponentiate to get back to orignal scale
+# pframe$blo<-exp(bb2_se[1,])
+# pframe$bhi<-exp(bb2_se[2,])
+# pframe$predMean <- pp
+# pframe <- pframe[, c('trt', "blo", "bhi", "predMean")]
+# pframe
 ```
 
 
 ### Make plots for acceleration for paper
 
 ```{r accelerationPlots, eval=FALSE}
-#plot 95% confidence intervals
-# "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
-pframe$trt3 = plyr::mapvalues(pframe$trt, from = c("full", "high", "low"), 
-                        to = c("Full range\n(220 - 450 Hz)", "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))
-
-pframe
-ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
-     geom_point()+ 
-     labs( y = expression ("Sonication acceleration "(m~s^{-2})), x = "Frequency range for reward") + 
-     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
-     theme(axis.text.x = element_text(angle = 45, hjust = 1), 
-           legend.position = 'none') +
-     theme_classic() + 
-  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58/2, label=c("a", "b", "a"),
-                color="black") 
-ga0
-ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_unadjusted.svg"), width = 5, height = 4)
-
-
-# make plot using bonferroni adjustments
-
-ga0 <- ggplot(pframe, aes(x=trt, y=predMean))+
-     geom_point()+ 
-     labs( y = expression ("Sonication acceleration "(m~s^{-2})), x = "Frequency range for reward") + 
-     geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
-     theme(axis.text.x = element_text(angle = 45, hjust = 1), 
-           legend.position = 'none') +
-     theme_classic() + 
-  annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58/2, label=c("a", "b", "a"),
-                color="black") 
-ga0
-ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_BonfAdjusted.svg"), width = 5, height = 4)
+# #plot 95% confidence intervals
+# # "Mean and bootstrap CI based on fixed-effects uncertainty ONLY"
+# pframe$trt3 = plyr::mapvalues(pframe$trt, from = c("full", "high", "low"), 
+#                         to = c("Full range\n(220 - 450 Hz)", "High range\n(340 - 390 Hz)", "Low range\n(220 - 330 Hz)"))
+# 
+# pframe
+# ga0 <- ggplot(pframe, aes(x=trt3, y=predMean))+
+#      geom_point()+ 
+#      labs( y = expression ("Sonication acceleration "(m~s^{-2})), x = "Frequency range for reward") + 
+#      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
+#      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+#            legend.position = 'none') +
+#      theme_classic() + 
+#   annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58/2, label=c("a", "b", "a"),
+#                 color="black") 
+# ga0
+# ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_unadjusted.svg"), width = 5, height = 4)
+# 
+# 
+# # make plot using bonferroni adjustments
+# 
+# ga0 <- ggplot(pframe, aes(x=trt, y=predMean))+
+#      geom_point()+ 
+#      labs( y = expression ("Sonication acceleration "(m~s^{-2})), x = "Frequency range for reward") + 
+#      geom_errorbar(aes(ymin = blo, ymax = bhi), width = 0.1)+
+#      theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+#            legend.position = 'none') +
+#      theme_classic() + 
+#   annotate(geom="text", x=c(1,2,3), y=c(0, 0, 0) + 58/2, label=c("a", "b", "a"),
+#                 color="black") 
+# ga0
+# ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_BonfAdjusted.svg"), width = 5, height = 4)
 
 ```
 
@@ -1049,20 +1056,27 @@ ggsave(plot = ga0, filename = file.path(figDir, "SonicationAmpPredsAndCI_BonfAdj
 
 
 ```{r}
-nbootSims = 10000
+nbootSims = 10
 
 
 # don't need hive, because that's not in the model we chose (above)
 pframe_a <- data.frame(expand.grid(trt = levels(sl$trt), 
-                                 IT_imputed = seq(min(s2$IT_imputed), max(s2$IT_imputed), length.out = 50),  
+                                 IT_imputed = seq(min(s2$IT_imputed), max(s2$IT_imputed), 
+                                                  length.out = 50),  
                                  beeColHive  = 99999, 
                                  trialNum = 2))
 pframe_a$acc <- 0
+
 pp <- predict(maa3, newdata = pframe_a, re.form=NA, type = 'response') %>% exp() # re.form sets all random effects to 0
 
 
+
+
 ### Calculate CI's (using bootstrap, not accounting for random effects)
-bb2 <- bootMer(maa3, FUN=function(x) predict(x, pframe_a, re.form=NA, type = 'response'), nsim = nbootSims) %>% exp()
+system.time({
+  bb2 <- bootMer(maa3, FUN=function(x) predict(x, pframe_a, re.form=NA, type = 'response'), nsim = nbootSims) 
+})
+
 print(paste("Number of bootstrap samples", nrow(bb2$t)))
 bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe_a$blo<-bb2_se[1,] %>% exp()
@@ -1082,16 +1096,8 @@ pframe_a$trt3 = plyr::mapvalues(pframe$trt, from = c("full", "high", "low"),
                                "Low range\n(220 - 330 Hz)"))
 ga1 <- ggplot(pframe_a, aes(x=IT_imputed, y=predMean, color = trt3, fill = trt3))+
         geom_line()+
-        #facet_wrap(~trt3) + 
-        # geom_rug(data = s44, aes(x = IT_imputed, color = trt3, y = s44$mean_freq), 
-        #          inherit.aes = FALSE, sides = "b", 
-        #          position = position_jitter(height = 0, width = 0.03)) + 
         labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Intertegular span (mm)") + 
         geom_ribbon(aes(ymin = blo, ymax = bhi), alpha = 0.3, color = NA)+
-        # geom_point(data = s44, aes(y= mean_freq)) +
-        # geom_errorbar(data = s44, aes(x = IT_imputed, ymin = mean_freq - sd_freq,
-        #                               ymax = mean_freq + sd_freq, color = trt3),
-        #               inherit.aes = FALSE, width = 0.1) +
         theme(plot.background = element_rect(fill = "transparent",colour = NA), 
             panel.background = element_rect(fill = "transparent",colour = NA), 
             legend.position =c(0.2, 0.82), 
@@ -1100,7 +1106,6 @@ ga1 <- ggplot(pframe_a, aes(x=IT_imputed, y=predMean, color = trt3, fill = trt3)
             legend.title = element_text(size = 8),
             panel.spacing.x = unit(1, "lines"), 
            plot.margin = margin(c(0.2,0.51, 0.2, 0.2), unit = "cm")) +
-        #scale_x_continuous(breaks = seq(3.4, 4.8, by = 0.5)) +
         scale_color_viridis_d(name = "Frequency range\nfor reward", end = 0.7, option = "inferno") + 
         scale_fill_viridis_d(name = "Frequency range\nfor reward", end =0.7, option = 'inferno')
 ga1
@@ -1133,6 +1138,7 @@ g2 <- g1 +
 ga2 <- ga1 + 
   theme(legend.position = "none", 
         plot.margin = margin(c(1.5,0.51, 0.2, 0.2), unit = "cm"))
+
 
 aa <- plot_grid(g2, ga2 )
 
