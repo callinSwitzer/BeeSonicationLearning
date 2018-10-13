@@ -231,6 +231,16 @@ head(newdf3)
 
 # GAMM
 # start with gamm so I can show change by visit number
+g00 = gamm4(freq ~ s(visitNum_centered, by = trt2) + IT + hive + treatment * trt2, random =  ~(1|beeID), data = newdf3)
+par(mfrow = c(2,3))
+aab <- plot(g00$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g01$gam) # Summary for paper 
+summary(g01$mer)
+dev.off()
+
+
+
+
 g01 = gamm4(freq ~ s(visitNum_centered, by = trt2) + IT + hive + treatment + trt2, random =  ~(1|beeID), data = newdf3)
 par(mfrow = c(2,3))
 aab <- plot(g01$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
@@ -273,23 +283,28 @@ anova(g06$mer, g07$mer) # g07 better
 
 ### Modeling frequency with lmer
 
-#### Do a similar thing to GAMM above (but make it more interpretable)
-
 ```{r modeling1}
 # fit lmer that is similar to gamm above
 # interaction that may be important, based on domain knowledge
-m0 = lmer(freq ~ I(scale(visitNum_centered)) * trt2 + I(scale(IT)) * treatment + hive  + I(scale(visitNum_centered^2)) + I(scale(IT)^2) +   (1|beeID), data = newdf3, REML = FALSE)
+
+m00 = lmer(freq ~ I(scale(visitNum_centered)) * trt2 + I(scale(IT)) * treatment + trt2*treatment+ hive  + I(scale(visitNum_centered^2)) + I(scale(IT)^2) +   (1|beeID), data = newdf3, REML = FALSE)
+
+summary(m00)
+
+
+
+
+
+
+m0 = lmer(freq ~ I(scale(visitNum_centered)) * trt2 + I(scale(IT)) * treatment +  hive  + I(scale(visitNum_centered^2)) + I(scale(IT)^2) +   (1|beeID), data = newdf3, REML = FALSE)
 
 summary(m0)
-
-
-
-
+anova(m0, m00) # BIC is lower for m0 (no trt2*treatment interaction), where trt2 is the order
 
 
 # no interaction
 m1 = update(m0, .~. - I(scale(visitNum_centered^2)))
-BIC(m0, m1) # stay with m1 -- no interaction
+BIC(m0, m1) # keep m1 -- no interaction
 anova(m0, m1) # agrees with BIC
 
 summary(m1)
@@ -349,7 +364,7 @@ finmod <- update(m7, .~., REML = TRUE)
 summary(finmod) # final model for paper -- same as gamm
 
 
-summary(finmod) # summary for paper -- no predictors predict frequency (when accounting for beeID)
+summary(finmod) # summary for paper -- no covariates predict frequency (when accounting for beeID)
 plot(finmod)
 qqnorm(ranef(finmod)$beeID[[1]])
 qqline(ranef(finmod)$beeID[[1]])
@@ -513,6 +528,15 @@ plot(Effect(c("treatment"), m1))
 ### Modeling amplitude with gamm
 
 ```{r modeling-amp1}
+g00 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2) + trt2 * treatment + IT + hive + treatment, random =  ~(1|beeID), data = newdf3)
+par(mfrow = c(2,3))
+aab <- plot(g00$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
+summary(g00$gam) 
+summary(g00$mer)
+dev.off()
+
+
+
 g01 = gamm4(log(amp_acc) ~ s(visitNum_centered, by = trt2) + trt2 + IT + hive + treatment, random =  ~(1|beeID), data = newdf3)
 par(mfrow = c(2,3))
 aab <- plot(g01$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
@@ -583,8 +607,17 @@ dev.off()
 ```{r modeling-amp3}
 # log transform for acceleration helps model fit better
 # start with large model (including interaction)
+
+ma00 = lmer(log(amp_acc) ~ visitNum_centered*trt2 +  hive +IT * treatment+ trt2*treatment + (1|beeID), data = newdf3, REML = FALSE)
+summary(ma00)
+
+
+
 ma0 = lmer(log(amp_acc) ~ visitNum_centered*trt2 +  hive +IT * treatment+ (1|beeID), data = newdf3, REML = FALSE)
 summary(ma0)
+
+anova(ma00, ma0) # keep ma0, that is, no interaction between treatment and order
+
 
 ma1 = update(ma0, .~. - visitNum_centered:trt2)
 
