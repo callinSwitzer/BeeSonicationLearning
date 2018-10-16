@@ -426,7 +426,7 @@ summary(glht(m3, linfct = mcp(trt = "Tukey")), test = adjusted("bonf"))
 
 # set number of bootstrap samples
 # refref: change to 10K before knitting
-nbootSims = 10 # ~ 80 minutes on Macbook pro for 10K bootstrap samples, 8min for 1k samples
+nbootSims = 10000 # ~ 80 minutes on Macbook pro for 10K bootstrap samples, 8min for 1k samples
 
 ITmean = mean(tapply(sl$IT_imputed, INDEX = sl$beeCol, FUN = function(x) x[1] ))
 print(ITmean)
@@ -1048,8 +1048,8 @@ summary(glht(m13, linfct = mcp(trt = "Tukey")), test = adjusted("bonf"))
 # Make acceleration plot the same as the frequency plot
 
 
-```{r}
-nbootSims = 10
+```{r, cache = TRUE}
+nbootSims = 10000
 
 
 # don't need hive, because that's not in the model we chose (above)
@@ -1138,7 +1138,7 @@ aa <- plot_grid(g2, ga2 )
 
 aa
 
-svg(file.path(figDir, "Exp1_AccAndFreq.svg"), width = 6.5, height = 4)
+svg(file.path(figDir, "001_Exp1_AccAndFreq.svg"), width = 6.5, height = 4)
 aa
 dev.off()
 ```

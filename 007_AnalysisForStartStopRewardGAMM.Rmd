@@ -470,6 +470,9 @@ pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
                     pframe$visitNum_centered > 0) 
                     , ]
 
+```
+
+```{r, cache = TRUE}
 # predict make plots, using full model (g00)
 
 pp <- exp(predict(finmod, newdata = pframe, re.form=NA, type = 'response')) # re.form sets all random effects to 0
@@ -477,13 +480,21 @@ pp <- exp(predict(finmod, newdata = pframe, re.form=NA, type = 'response')) # re
 # refref change to 10K
 nbootSims2 = 10000
 ### Calculate CI's (using bootstrap, not accounting for random effects)
-bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+system.time({
+  bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+})
+
 print(paste("Number of bootstrap samples", nrow(bb2$t)))
 bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe$blo<- exp(bb2_se[1,]) # exponentiate to put on original scale
 pframe$bhi<- exp(bb2_se[2,])
 pframe$predMean <- pp
 pframe
+
+```
+
+
+```{r}
 
 pframe$treatment_rewarded2 <- mapvalues(pframe$treatment_rewarded, from = c(" F", " T"), 
                                         to = c("No Reward", "Reward"))
@@ -625,10 +636,15 @@ summary(finmod_noInt)
 anova(finmod_noInt, update(finmod_noInt, .~. - treatment_rewarded)) # treatment is a significant predictor
 
 
+
+
+```
+
+```{r, cache = TRUE}
+
 ## predict lmer
 
 # using hive 7, since it's the one with the most data
-
 # calculate an average IT for prediction
 
 pframe = expand.grid(trt2 = levels(droplevels(bees$trt2)), 
@@ -657,7 +673,6 @@ pframe <- pframe[(pframe$trt2 == "Rewarded -> Unrewarded" &
 
 
 # predict make plots, using full model 
-
 pp <- predict(finmod, newdata = pframe, re.form=NA, type = 'response') # re.form sets all random effects to 0
 
 
@@ -673,8 +688,8 @@ pframe$blo<- (bb2_se[1,]) # exponentiate to put on original scale
 pframe$bhi<- (bb2_se[2,])
 pframe$predMean <- pp
 pframe
-
-
+```
+```{r}
 pframe$treatment_rewarded2 <- mapvalues(pframe$treatment_rewarded, from = c(" F", " T"), 
                                         to = c("No Reward", "Reward"))
 
@@ -777,12 +792,16 @@ p1 <- Fig31 + xlab("") + theme(legend.position = "none",
             labs(y = "Sonication frequency (Hz)") 
 p2 <- Fig32 + theme(strip.background = element_blank(),
   strip.text.x = element_blank(), legend.position = c(0.6, 0.7), legend.box.background = element_blank()) + 
-  labs(y = expression ("Sonication amplitude  "(m~s^{-2})))
+  labs(y = expression ("Sonication acceleration  "(m~s^{-2})))
 
 
 aa <- plot_grid(p1, p2, align = 'v', axis = 'l', rel_widths = c(1,1), ncol = 1, nrow = 2)
 
+
+
+svg(file.path(figDir, "002_CombinedFreqAmp_rewNoRew_IT.svg"), width = 6, height = 6)
 ggdraw(aa)
+dev.off()
 
 save_plot(file.path(figDir, "CombinedFreqAmp_rewNoRew_IT.svg"), plot = aa, base_width =6, base_height = 6)
 
