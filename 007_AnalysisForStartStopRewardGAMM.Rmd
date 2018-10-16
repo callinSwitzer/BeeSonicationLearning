@@ -337,7 +337,7 @@ ggsave(file.path(figDir, "beeSonicationPercentage_onePlot_twoHives.png"), units 
 ```
 
 
-### Visualize data -- refref: averaged by bee and trial
+### Visualize data
 
 This is not super informative
 
@@ -428,7 +428,10 @@ finmod <- g03
 ITmean
 
 
-# look at model without interaction
+
+
+
+
 # look at model without interaction
 finmod_noInt_acc <- lmer(log(amp_acc) ~ treatment_rewarded + I(IT_mm - ITmean) + hive + (1|beeID), data = bees, REML = TRUE)
 summary(finmod_noInt_acc)
@@ -570,6 +573,10 @@ Fig32 <- ampPlot_rug
 
 ```{r}
 
+
+g0001 = gamm4(freq ~ s(visitNum_centered, by = trt2) + trt2*treatment_rewarded + treatment_rewarded * IT_mm + hive , random =  ~(1|beeID), data = bees)
+
+
 # start with gamm so I can show change by visit number
 g01 = gamm4(freq ~ s(visitNum_centered, by = trt2) +  trt2 + IT_mm*treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
 par(mfrow = c(2,3))
@@ -577,6 +584,8 @@ aab <- plot(g01$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
 summary(g01$gam) # Summary for paper 
 summary(g01$mer)
 dev.off()
+
+anova(g0001$mer, g01$mer) # no evidence for treatment * order interaction
 
 g02 = gamm4(freq ~ s(visitNum) +  trt2 + IT_mm*treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
 anova(g01$mer, g02$mer) # go with g02
@@ -587,7 +596,7 @@ anova(g02$mer, g03$mer) # go with g03
 summary(g03$mer)
 
 g04 <- gamm4(freq ~ IT_mm*treatment_rewarded + hive , random =  ~(1|beeID), data = bees)
-anova(g03$mer, g04$mer) # g04
+anova(g03$mer, g04$mer) # keep g04
 summary(g04$mer)
 
 
@@ -614,8 +623,6 @@ summary(finmod_noInt)
 
 # compare model with and without treatment for frequ
 anova(finmod_noInt, update(finmod_noInt, .~. - treatment_rewarded)) # treatment is a significant predictor
-
-
 
 
 ## predict lmer
@@ -657,7 +664,9 @@ pp <- predict(finmod, newdata = pframe, re.form=NA, type = 'response') # re.form
 # refref: change to 10K
 nbootSims2 = 10000
 ### Calculate CI's (using bootstrap, not accounting for random effects)
-bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+system.time({
+  bb2 <- bootMer(finmod, FUN=function(x) predict(x, pframe, re.form=NA, type = 'response'), nsim = nbootSims2)
+})
 print(paste("Number of bootstrap samples", nrow(bb2$t)))
 bb2_se <-apply(bb2$t,2,function(x) quantile(x, probs = c(0.025, 0.975)))
 pframe$blo<- (bb2_se[1,]) # exponentiate to put on original scale

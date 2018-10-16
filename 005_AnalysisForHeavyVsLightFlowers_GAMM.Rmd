@@ -234,8 +234,8 @@ head(newdf3)
 g00 = gamm4(freq ~ s(visitNum_centered, by = trt2) + IT + hive + treatment * trt2, random =  ~(1|beeID), data = newdf3)
 par(mfrow = c(2,3))
 aab <- plot(g00$gam, all.terms = TRUE, rug = FALSE, shade = TRUE)
-summary(g01$gam) # Summary for paper 
-summary(g01$mer)
+summary(g00$gam) # Summary for paper 
+summary(g00$mer)
 dev.off()
 
 
@@ -434,7 +434,9 @@ anova(m1, update(m1, .~. - treatment)) #p-val and BIC for paper
 
 pframe$trt3 <- mapvalues(pframe$trt2, from = c("Sham first", "Weighted first"), 
                           to = c("Sham -> Weighted", "Weighted -> Sham"))
+```
 
+```{r}
 
 g0 <- ggplot(pframe, aes(x=visitNum_centered, y=predMean))+
      geom_line(aes(color = treatment))+ 
@@ -719,6 +721,11 @@ pframe2$bhi<- exp(bb2_se[2,])
 pframe2$predMean <- pp
 pframe2
 
+```
+
+
+```{r}
+
 ### Plot amplitude lmer with trial number
 
 pframe2$trt3 <- mapvalues(pframe2$trt2, from = c("Sham first", "Weighted first"), 
@@ -819,7 +826,7 @@ ggsave(filename = file.path(figDir, "WeightedSham_Amp_pointWhiskers.pdf"), width
 
 g0IT <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1), ], aes(x=IT, y=predMean))+
     geom_line(aes(color = treatment), alpha = 1) + 
-     labs(y = expression ("Sonication ampllitude "(m~s^{-2})), x = "Intertegular span (mm)") + 
+     labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Intertegular span (mm)") + 
      geom_ribbon(aes(x = IT, ymin = blo, ymax = bhi, fill = treatment), alpha = 0.2) + 
   scale_color_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
   scale_fill_viridis(name = "Flower treatment", discrete = TRUE, begin =0.3, end = 0.8) + 
@@ -951,7 +958,7 @@ qqline(ranef(m1)$beeID[[1]])
 
 ```{r bootstrap3, cache = TRUE}
 # set number of bootstrap replicates for models
-nbootSims = 1000
+nbootSims = 10000
 
 table(new_df$hive) # more trials from hive 3
 
@@ -1033,7 +1040,7 @@ qqline(ranef(ma3)$beeID[[1]])
 ```{r bootstrap_amp3, cache = TRUE}
 
 # set number of bootstrap replicates for models
-nbootSims2 = 1000
+nbootSims2 = 10000
 
 # using hive 3, since it's the one with the most data
 pframe <- data.frame(treatment = levels(droplevels(new_df$treatment)), IT = ITmean, hive = factor(3, levels = levels(new_df$hive)),  beeID = 99999)
@@ -1076,7 +1083,6 @@ ggsave(plot = ga0, filename = file.path(figDir, "HeavyLight_PredsAndCI_amp.pdf")
 
 ```{r}
 
-# refref: note I might want to align these two figure for paper (in one plot)
 # WeightedSham_Amp_pointWhiskers_BW.pdf
 # WeightedSham_Freq_pointWhiskers_BW.pdf
 
@@ -1090,7 +1096,7 @@ aa <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2))
 
 ggdraw(aa)
 
-ac <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2), labels = "AUTO")
+ac <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2))
 ggdraw(ac)
 
 save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab_IT.svg"), plot = aa, base_width = 7, base_height = 3)
