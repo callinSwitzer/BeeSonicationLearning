@@ -507,17 +507,18 @@ ggsave(plot = g0, filename = file.path(figDir, "SonicationFreqPredsAndCI_unadjus
 # make a different version of the plot
 ```{r}
 g1 <- ggplot(pframe, aes(x=IT_imputed, y=predMean, color = trt3, fill = trt3))+
-        geom_line()+
+        
         #facet_wrap(~trt3) + 
         # geom_rug(data = s44, aes(x = IT_imputed, color = trt3, y = s44$mean_freq), 
         #          inherit.aes = FALSE, sides = "b", 
         #          position = position_jitter(height = 0, width = 0.03)) + 
         labs(y = "Sonication frequency (Hz)", x = "Intertegular span (mm)") + 
-        geom_ribbon(aes(ymin = blo, ymax = bhi), alpha = 0.3, color = NA)+
+        geom_ribbon(aes(ymin = blo, ymax = bhi), alpha = 0.2, color = NA)+
         # geom_point(data = s44, aes(y= mean_freq)) +
         # geom_errorbar(data = s44, aes(x = IT_imputed, ymin = mean_freq - sd_freq,
         #                               ymax = mean_freq + sd_freq, color = trt3),
         #               inherit.aes = FALSE, width = 0.1) +
+        geom_line()+
         theme(plot.background = element_rect(fill = "transparent",colour = NA), 
             panel.background = element_rect(fill = "transparent",colour = NA), 
             legend.position =c(0.8, 0.8), 
@@ -1088,9 +1089,11 @@ pframe_a$trt3 = plyr::mapvalues(pframe$trt, from = c("full", "high", "low"),
                                "High range\n(340 - 390 Hz)",
                                "Low range\n(220 - 330 Hz)"))
 ga1 <- ggplot(pframe_a, aes(x=IT_imputed, y=predMean, color = trt3, fill = trt3))+
+        
+        labs(y = expression ("Sonication acceleration "(m~s^{-2})), 
+             x = "Intertegular span (mm)") + 
+        geom_ribbon(aes(ymin = blo, ymax = bhi), alpha = 0.2, color = NA)+
         geom_line()+
-        labs(y = expression ("Sonication acceleration "(m~s^{-2})), x = "Intertegular span (mm)") + 
-        geom_ribbon(aes(ymin = blo, ymax = bhi), alpha = 0.3, color = NA)+
         theme(plot.background = element_rect(fill = "transparent",colour = NA), 
             panel.background = element_rect(fill = "transparent",colour = NA), 
             legend.position =c(0.2, 0.82), 
