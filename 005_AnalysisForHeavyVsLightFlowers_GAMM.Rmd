@@ -487,6 +487,10 @@ ggsave(filename = file.path(figDir, "WeightedSham_Freq_pointWhiskers_BW.pdf"), w
 
 
 
+# change "weighted" to "increased-mass"
+pframe$treatment <- mapvalues(pframe$treatment, from = c("Sham", "Weighted"), 
+                          to = c("Sham", "Increased mass"))
+
 g0 <- ggplot(pframe[pframe$visitNum_centered %in% c(-25, 25), ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
      labs(y = "Sonication frequency (Hz)", x = "Flower treatment") + 
@@ -726,6 +730,10 @@ pframe2
 
 ```{r}
 
+# change "weighted" to "increased-mass"
+pframe2$treatment <- mapvalues(pframe2$treatment, from = c("Sham", "Weighted"), 
+                          to = c("Sham", "Increased mass"))
+
 ### Plot amplitude lmer with trial number
 
 pframe2$trt3 <- mapvalues(pframe2$trt2, from = c("Sham first", "Weighted first"), 
@@ -792,7 +800,6 @@ ggsave(filename = file.path(figDir, "WeightedSham_Timeseries_trtFacet.pdf"), wid
 
 ```{r}
 # mean and 95% CI (without visit number)
-
 g0_amp <- ggplot(pframe2[pframe2$visitNum_centered %in% c(1) & pframe2$IT == ITmean, ], aes(x=treatment, y=predMean))+
     geom_point(aes(color = treatment), alpha = 1) + 
      labs(y = expression ("Sonication amplitude "(m~s^{-2})), x = "Flower treatment") + 
@@ -1099,11 +1106,13 @@ ggdraw(aa)
 ac <- plot_grid(pfreq, pamp, align = 'h', axis = 'l', rel_widths = c(1,2))
 ggdraw(ac)
 
-save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_noxlab_IT.svg"), plot = aa, base_width = 7, base_height = 3)
 
-save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot_IT.svg"), plot = ac, base_width = 7, base_height = 3)
+save_plot(file.path(figDir, "003_HeavyLight.svg"), plot = ac, base_width = 7, base_height = 3)
 
-save_plot(file.path(figDir, "CombinedFreqAmp_weightedSham4_annot_IT.png"), plot = ac, base_width = 7, base_height = 3)
+png(file.path(figDir, "003_HeavyLight.png"), width = 7, 
+    height = 3, units = "in", res = 500)
+ggdraw(ac)
+dev.off()
 
 ```
 
